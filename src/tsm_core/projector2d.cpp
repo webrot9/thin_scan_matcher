@@ -2,7 +2,7 @@
 
 #include <Eigen/Eigenvalues> 
 
-namespace PSolver {
+namespace tsm {
 
   struct SinCosTable{
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;

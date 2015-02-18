@@ -26,15 +26,15 @@ class LaserHandler {
     if (_laser_projector == NULL) {
       float fov = 0.f;
       fov = msg->angle_increment * msg->ranges.size();
-      _laser_projector = new PSolver::Projector2D();
+      _laser_projector = new tsm::Projector2D();
       _laser_projector->setMaxRange(10.f);
       _laser_projector->setMinRange(msg->range_min);
       _laser_projector->setFov(fov);
       _laser_projector->setNumRanges(msg->ranges.size());
     }
 
-    PSolver::Cloud2D *current = NULL;
-    current = new PSolver::Cloud2D();
+    tsm::Cloud2D *current = NULL;
+    current = new tsm::Cloud2D();
 
     _laser_projector->unproject(*current, msg->ranges);
 
@@ -46,12 +46,12 @@ class LaserHandler {
   inline void setFrameSkip(int frame_skip) { _frame_skip = frame_skip; }
   inline int frameSkip() const { return _frame_skip; }
   inline int frameCount() const { return _frame_count; }
-  inline std::list<PSolver::Cloud2D*>* clouds()  { return &_clouds; }
-  inline PSolver::Projector2D* projector()  { return _laser_projector; }
+  inline std::list<tsm::Cloud2D*>* clouds()  { return &_clouds; }
+  inline tsm::Projector2D* projector()  { return _laser_projector; }
  private:
-  PSolver::Projector2D* _laser_projector;
+  tsm::Projector2D* _laser_projector;
   Eigen::Isometry2f _transform;
-  std::list<PSolver::Cloud2D*> _clouds;
+  std::list<tsm::Cloud2D*> _clouds;
   int _frame_count;
   int _frame_skip;
 };

@@ -1,7 +1,7 @@
 #pragma once
 #include "cloud2d.h"
 
-namespace PSolver {
+namespace tsm {
   struct SinCosTable;
 
   class Projector2D {

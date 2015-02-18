@@ -5,7 +5,7 @@
 //#define _NAN_CHECK_
 //#define _GO_PARALLEL_
 
-namespace PSolver{
+namespace tsm{
 
   using namespace std;
 
