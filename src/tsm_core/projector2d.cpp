@@ -91,31 +91,53 @@ namespace PSolver {
   void Projector2D::unproject(Cloud2D& model, const UnsignedShortImage& depth_image,
 		 const Eigen::Matrix3f camera_matrix, const Eigen::Isometry3f T) {
     FloatVector ranges;
-    IntVector accumulators;
+    std::vector<FloatVector> ranges_to_merge;
+    std::vector<Cloud2D> clouds_to_merge;
     ranges.resize(depth_image.cols);
-    accumulators.resize(depth_image.cols);
+    ranges_to_merge.resize(depth_image.rows);
+    clouds_to_merge.resize(depth_image.rows);
     std::fill(ranges.begin(), ranges.end(), 0);
-    std::fill(accumulators.begin(), accumulators.end(), 0);
-    float r = 0.f;
+
     Eigen::Vector3f real_point;
     Eigen::Vector3f im_point;
 
     Eigen::Matrix3f camera_matrix_inv = camera_matrix.inverse();
 
-    for (int r = 0; r < depth_image.rows; ++r) {
-      for (int c = 0; c < depth_image.cols; ++c) {
-	im_point = Eigen::Vector3f(c, r, depth_image.at<unsigned short>(r, c));
+    int index = 0;
+
+    for (size_t r = 0; r < depth_image.rows; ++r) {
+      for (size_t c = 0; c < depth_image.cols; ++c) {
+	im_point = Eigen::Vector3f(
+				   c,
+				   r,
+				   depth_image.at<unsigned short>(r, c) * 0.001
+				   );
 	real_point = T.linear() * camera_matrix_inv * im_point;
-	ranges[c] += real_point.x();
-	++accumulators[c];
+	float range = sqrt(real_point.x()*real_point.x() + real_point.z()*real_point.z());
+
+	if (real_point.z() != real_point.z() || real_point.z()<_min_range || real_point.z()>_max_range)
+	  continue;
+
+	ranges[c] = range;
       }
+
+      ranges_to_merge[r] = ranges;
     }
 
-    for (size_t i = 0; i < depth_image.cols; ++i) {
-      ranges[i] /= accumulators[i];
+    IntVector current_indices, reference_indices;
+    FloatVector current_ranges, reference_ranges;
+    unproject(clouds_to_merge[0], ranges_to_merge[0]);
+    project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), clouds_to_merge[0]);
+    
+    for (size_t i = 1; i < depth_image.rows; ++i) {
+      unproject(clouds_to_merge[i], ranges_to_merge[i]);
+      project(current_ranges, current_indices, Eigen::Isometry2f::Identity(), clouds_to_merge[i]);
+      merge(reference_ranges, reference_indices, clouds_to_merge[0],
+	    current_ranges, current_indices, clouds_to_merge[i],
+	    0.8f, 0.25f);
     }
-
-    unproject(model, ranges);
+    
+    model = clouds_to_merge[0];
   }
 
 

@@ -225,9 +225,10 @@ namespace PSolver{
       pt_to_draw.push_back(cv::Point(pt.x(), pt.y()));
       normal_to_draw.push_back(cv::Point(n.x(), n.y()));
     }
-
+    
     float max_dest_size = std::max(img.rows, img.cols);
     float img_size = std::max(max_value * scale, max_dest_size);
+
     UnsignedCharImage tmp = cv::Mat::zeros(img_size, img_size, CV_8UC1);
     
     for(size_t i = 0; i < pt_to_draw.size(); ++i) {
@@ -256,7 +257,6 @@ namespace PSolver{
 			      (tmp.rows - img.rows) * 0.5,
 			      img.cols,
 			      img.rows);
-
       tmp(roi) += img;
     }
 

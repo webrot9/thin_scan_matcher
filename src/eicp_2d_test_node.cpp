@@ -3,7 +3,12 @@
 
 // ROS
 #include "ros/ros.h"
+#include <message_filters/subscriber.h>
+#include <message_filters/synchronizer.h>
+#include "message_filters/sync_policies/approximate_time.h"
 #include "std_msgs/String.h"
+#include "sensor_msgs/Image.h"
+#include "sensor_msgs/CameraInfo.h"
 
 // OpenCV
 #include "opencv2/opencv.hpp"
@@ -15,7 +20,7 @@
 #include "tsm_core/correspondence_finder2d.h"
 #include "tsm_core/solver2d.h"
 
-#include "laser_handler.h"
+#include "message_handler.h"
 
 inline char float2char(float d) {
   float alpha = 255/10;
@@ -28,10 +33,12 @@ inline char float2char(float d) {
 int main(int argc, char **argv) {
   ros::init(argc, argv, "tsm_test_node");
 
-  std::string scan_topic;
+  std::string laser_topic;
+  std::string camera_topic;
+  std::string camera_info_topic;
   int frame_skip;
   double bpr;
-  LaserHandler laser_handler;
+  MessageHandler message_handler;
   PSolver::Solver2D solver;
   PSolver::Projector2D* projector = NULL;
   PSolver::CorrespondenceFinder2D correspondence_finder;
@@ -39,7 +46,9 @@ int main(int argc, char **argv) {
   correspondence_finder.setSolver(&solver);
 
   ros::NodeHandle n("~");
-  n.param("scan_topic", scan_topic, std::string("/scan"));
+  
+  n.param("laser_topic", laser_topic, std::string("/scan"));
+  n.param("camera_topic", camera_topic, std::string("/camera/depth/image_raw"));
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.15);
 
@@ -47,14 +56,24 @@ int main(int argc, char **argv) {
     frame_skip = 1;
 
   printf("Launched with params:\n");
-  printf("_scan_topic:= %s\n", scan_topic.c_str());
+  printf("_laser_topic:= %s\n", laser_topic.c_str());
+  printf("_camera_topic:= %s\n", camera_topic.c_str());
   printf("_frame_skip:= %d\n", frame_skip);
   printf("_bpr:= %f\n", bpr);
   fflush(stdout);
 
-  laser_handler.setFrameSkip(frame_skip);
+  unsigned found = camera_topic.find_last_of("/");
+  camera_info_topic = camera_topic.substr(0, found) + "/camera_info";
+  message_handler.setFrameSkip(frame_skip);
 
-  ros::Subscriber sub = n.subscribe(scan_topic, 100, &LaserHandler::laser_callback, &laser_handler);
+  ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
+  message_filters::Subscriber<sensor_msgs::Image> camera_sub(n, camera_topic, 100);
+  message_filters::Subscriber<sensor_msgs::CameraInfo> camera_info_sub(n, camera_info_topic, 100);
+
+  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::CameraInfo> MySyncPolicy;
+  message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(30), camera_sub, camera_info_sub);
+  sync.registerCallback(boost::bind(&MessageHandler::camera_callback, &message_handler, _1, _2));
+
   PSolver::Cloud2D *reference = NULL;
   PSolver::Cloud2D *current = NULL;  
 
@@ -65,11 +84,11 @@ int main(int argc, char **argv) {
   float offset_y = 0;
 
   while (ros::ok()) {
-    std::list<PSolver::Cloud2D*>* clouds = laser_handler.clouds();
+    std::list<PSolver::Cloud2D*>* clouds = message_handler.clouds();
 
     if (clouds->size() > 0) {
       if (projector == NULL) {
-	projector = laser_handler.projector();
+	projector = message_handler.projector();
 	correspondence_finder.setProjector(projector);
       }
 
@@ -129,27 +148,27 @@ int main(int argc, char **argv) {
       int size = std::min(referenceIndices.size(), currentIndices.size());
 
       PSolver::UnsignedCharImage current_im, reference_im, refcurr_im;
-      current_im = cv::Mat::zeros(30, currentIndices.size(), CV_8UC1);
+      //current_im = cv::Mat::zeros(30, currentIndices.size(), CV_8UC1);
 
-      for (size_t c = 0; c < currentIndices.size(); c++) {
-	float d = 0;
-	if (currentIndices[c] >= 0) {
-	  d = currentRanges[c];
-	}
-	for (size_t r = 0; r < 10; r++) {
-	  current_im.at<uchar>(r, c) = float2char(d);
-	}
-      }
+      // for (size_t c = 0; c < currentIndices.size(); c++) {
+      // 	float d = 0;
+      // 	if (currentIndices[c] >= 0) {
+      // 	  d = currentRanges[c];
+      // 	}
+      // 	for (size_t r = 0; r < 10; r++) {
+      // 	  current_im.at<uchar>(r, c) = float2char(d);
+      // 	}
+      // }
 
-      for(size_t c = 0; c < referenceIndices.size(); c++) {
-	float d = 0;
-	if (referenceIndices[c] >= 0) {
-	  d = referenceRanges[c];
-	}
-	for (size_t r = 20; r < 30; r++) {
-	  current_im.at<uchar>(r, c) = float2char(d);
-	}
-      }
+      // for(size_t c = 0; c < referenceIndices.size(); c++) {
+      // 	float d = 0;
+      // 	if (referenceIndices[c] >= 0) {
+      // 	  d = referenceRanges[c];
+      // 	}
+      // 	for (size_t r = 20; r < 30; r++) {
+      // 	  current_im.at<uchar>(r, c) = float2char(d);
+      // 	}
+      // }
 
       for (int c = 0; c < size; c++) {
 	int& refIdx = referenceIndices[c];
@@ -168,12 +187,12 @@ int main(int argc, char **argv) {
 	    ++outliers;
 	}
 
-	for(size_t r = 10; r < 20; r++)
-	  current_im.at<uchar>(r, c) = float2char(diff);
+	//for(size_t r = 10; r < 20; r++)
+	//current_im.at<uchar>(r, c) = float2char(diff);
  
       }
 
-      cv::imshow("Scans", current_im);
+      //cv::imshow("Scans", current_im);
  
       if (num_points/size < 0.05) {
 	if(current != reference)
@@ -184,7 +203,10 @@ int main(int argc, char **argv) {
       mean_dist /= num_points;
       float error = outliers/num_points;
 
-      PSolver::Cloud2D* to_delete = NULL;
+      PSolver::UnsignedCharImage current_image;
+      current->draw(current_image);
+      cv::imshow("Current Image", current_image);
+
       if(error <= bpr) {
 	PSolver::merge(referenceRanges, referenceIndices, *reference,
       		     currentRanges, currentIndices, *current,
@@ -213,7 +235,7 @@ int main(int argc, char **argv) {
       im_tf.linear() = global_t.linear()*scale;
       im_tf.translation() = (global_t.translation() + Eigen::Vector2f(offset_x, offset_y))*scale;
       reference->draw(show, false, global_t);
-
+      
       cv::imshow("LocalMap", show);
       int tasto = cv::waitKey(1);
       
