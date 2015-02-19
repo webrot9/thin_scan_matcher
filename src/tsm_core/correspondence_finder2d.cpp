@@ -1,6 +1,6 @@
 #include "correspondence_finder2d.h"
 
-namespace PSolver {
+namespace tsm {
   void CorrespondenceFinder2D::compute() {
     _correspondences.clear();
     _indicesCurrent.clear();

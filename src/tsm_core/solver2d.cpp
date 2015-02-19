@@ -3,7 +3,7 @@
 //#define _GO_PARALLEL_
 //#define _FAST_MULT_
 
-namespace PSolver {
+namespace tsm {
   Solver2D::Solver2D(){
     T.setIdentity();
     maxError = 10;

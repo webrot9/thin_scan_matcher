@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include "opencv2/opencv.hpp"
 
-namespace PSolver {
+namespace tsm {
 
   typedef std::vector<Eigen::Vector3f, Eigen::aligned_allocator<Eigen::Vector3f> > Vector3fVector;
   typedef std::vector<Eigen::Vector2f, Eigen::aligned_allocator<Eigen::Vector2f> > Vector2fVector;

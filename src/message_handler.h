@@ -36,15 +36,15 @@ class MessageHandler {
     if (_laser_projector == NULL) {
       float fov = 0.f;
       fov = msg->angle_increment * msg->ranges.size();
-      _laser_projector = new PSolver::Projector2D();
+      _laser_projector = new tsm::Projector2D();
       _laser_projector->setMaxRange(10.f);
       _laser_projector->setMinRange(msg->range_min);
       _laser_projector->setFov(fov);
       _laser_projector->setNumRanges(msg->ranges.size());
     }
 
-    PSolver::Cloud2D *current = NULL;
-    current = new PSolver::Cloud2D();
+    tsm::Cloud2D *current = NULL;
+    current = new tsm::Cloud2D();
 
     _laser_projector->unproject(*current, msg->ranges);
 
@@ -57,7 +57,7 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
   ++_camera_frame_count;
   Eigen::Matrix3f camera_matrix;
   cv_bridge::CvImagePtr cvImagePtr = cv_bridge::toCvCopy(image);  
-  PSolver::UnsignedShortImage depth_image = cvImagePtr->image;
+  tsm::UnsignedShortImage depth_image = cvImagePtr->image;
 
   for(int r = 0; r < 3; r++)
     for(int c = 0; c < 3; c++)
@@ -67,15 +67,15 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
     return;
 
   if (_camera_projector == NULL) {
-    _camera_projector = new PSolver::Projector2D();
+    _camera_projector = new tsm::Projector2D();
     _camera_projector->setMaxRange(5.0);
     _camera_projector->setMinRange(0.20);
     _camera_projector->setFov(2*atan2(camera_matrix(0, 2), camera_matrix(0, 0)));
     _camera_projector->setNumRanges(depth_image.cols);
   }
 
-  PSolver::Cloud2D *current = NULL;
-  current = new PSolver::Cloud2D();
+  tsm::Cloud2D *current = NULL;
+  current = new tsm::Cloud2D();
 
   _camera_projector->unproject(*current, depth_image, camera_matrix, Eigen::Isometry3f::Identity());
 
@@ -87,16 +87,16 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
   inline int frameSkip() const { return _frame_skip; }
   inline int laserFrameCount() const { return _laser_frame_count; }
   inline int cameraFrameCount() const { return _camera_frame_count; }
-  inline std::list<PSolver::Cloud2D*>* clouds()  { return &_clouds; }
-  inline PSolver::Projector2D* projector()  { 
+  inline std::list<tsm::Cloud2D*>* clouds()  { return &_clouds; }
+  inline tsm::Projector2D* projector()  { 
     if (_camera_projector != NULL) return _camera_projector;
 
     return _laser_projector;
   }
  private:
-  PSolver::Projector2D* _laser_projector;
-  PSolver::Projector2D* _camera_projector;
-  std::list<PSolver::Cloud2D*> _clouds;
+  tsm::Projector2D* _laser_projector;
+  tsm::Projector2D* _camera_projector;
+  std::list<tsm::Cloud2D*> _clouds;
   int _laser_frame_count;
   int _camera_frame_count;
   int _frame_skip;

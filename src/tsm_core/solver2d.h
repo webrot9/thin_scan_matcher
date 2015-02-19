@@ -7,7 +7,7 @@
 
 #include "cloud2d.h"
 
-namespace PSolver {
+namespace tsm {
   struct Solver2D{
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 

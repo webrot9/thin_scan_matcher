@@ -2,7 +2,7 @@
 #include "defs.h"
 #include <iostream>
 
-namespace PSolver{
+namespace tsm{
 
   struct RichPoint2D {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;

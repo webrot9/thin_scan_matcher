@@ -3,7 +3,7 @@
 #include "projector2d.h"
 #include "solver2d.h"
 
-namespace PSolver {
+namespace tsm {
   class CorrespondenceFinder2D {
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW;

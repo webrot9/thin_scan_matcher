@@ -38,10 +38,11 @@ int main(int argc, char **argv) {
   std::string camera_info_topic;
   int frame_skip;
   double bpr;
+
   MessageHandler message_handler;
-  PSolver::Solver2D solver;
-  PSolver::Projector2D* projector = NULL;
-  PSolver::CorrespondenceFinder2D correspondence_finder;
+  tsm::Solver2D solver;
+  tsm::Projector2D* projector = NULL;
+  tsm::CorrespondenceFinder2D correspondence_finder;
 
   correspondence_finder.setSolver(&solver);
 
@@ -74,8 +75,8 @@ int main(int argc, char **argv) {
   message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(30), camera_sub, camera_info_sub);
   sync.registerCallback(boost::bind(&MessageHandler::camera_callback, &message_handler, _1, _2));
 
-  PSolver::Cloud2D *reference = NULL;
-  PSolver::Cloud2D *current = NULL;  
+  tsm::Cloud2D *reference = NULL;
+  tsm::Cloud2D *current = NULL;  
 
   Eigen::Isometry2f global_t;
 
@@ -84,7 +85,7 @@ int main(int argc, char **argv) {
   float offset_y = 0;
 
   while (ros::ok()) {
-    std::list<PSolver::Cloud2D*>* clouds = message_handler.clouds();
+    std::list<tsm::Cloud2D*>* clouds = message_handler.clouds();
 
     if (clouds->size() > 0) {
       if (projector == NULL) {
@@ -108,7 +109,7 @@ int main(int argc, char **argv) {
       solver.computeOmegas();
       correspondence_finder.compute();
 
-      PSolver::UnsignedCharImage correspondences_img;
+      tsm::UnsignedCharImage correspondences_img;
       correspondence_finder.drawCorrespondences(correspondences_img);
       cv::imshow("Correspondences", correspondences_img);
 
@@ -122,8 +123,8 @@ int main(int argc, char **argv) {
 			);
       }
 
-      PSolver::FloatVector currentRanges, currentInRefRanges, referenceRanges;
-      PSolver::IntVector currentIndices, currentInRefIndices, referenceIndices;
+      tsm::FloatVector currentRanges, currentInRefRanges, referenceRanges;
+      tsm::IntVector currentIndices, currentInRefIndices, referenceIndices;
       Eigen::Isometry2f global_t_inverse = global_t.inverse();
       
       current->transformInPlace(solver.T);
@@ -147,7 +148,7 @@ int main(int argc, char **argv) {
       float mean_dist = 0;
       int size = std::min(referenceIndices.size(), currentIndices.size());
 
-      PSolver::UnsignedCharImage current_im, reference_im, refcurr_im;
+      tsm::UnsignedCharImage current_im, reference_im, refcurr_im;
       //current_im = cv::Mat::zeros(30, currentIndices.size(), CV_8UC1);
 
       // for (size_t c = 0; c < currentIndices.size(); c++) {
@@ -203,12 +204,12 @@ int main(int argc, char **argv) {
       mean_dist /= num_points;
       float error = outliers/num_points;
 
-      PSolver::UnsignedCharImage current_image;
+      tsm::UnsignedCharImage current_image;
       current->draw(current_image);
       cv::imshow("Current Image", current_image);
 
       if(error <= bpr) {
-	PSolver::merge(referenceRanges, referenceIndices, *reference,
+	tsm::merge(referenceRanges, referenceIndices, *reference,
       		     currentRanges, currentIndices, *current,
 		     0.8f, 0.25f);
 	global_t = global_t * solver.T;
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
 	std::cout << "Inliers percentage: " << 1 - error << std::endl;
       }
 
-      PSolver::UnsignedCharImage show;
+      tsm::UnsignedCharImage show;
       
       Eigen::Isometry2f im_tf;
       im_tf.linear() = global_t.linear()*scale;
