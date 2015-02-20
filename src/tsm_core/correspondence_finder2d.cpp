@@ -1,43 +1,51 @@
 #include "correspondence_finder2d.h"
+#include <stdexcept>
 
 namespace tsm {
-  void CorrespondenceFinder2D::compute() {
+  void CorrespondenceFinder2D::init() {
     _correspondences.clear();
     _indicesCurrent.clear();
-    if(_projector != NULL && _solver != NULL) {
+    if(_projector == NULL || _solver == NULL) {
+      throw std::runtime_error("Cannot init correspondences without a projector and a solver");
+    }
       _projector->project(
 			  _projectedReferenceRanges,
 			  _indicesReference,
-			  Eigen::Isometry2f::Identity(),
+			  _solver->T,
 			  *_solver->reference
 			  );
+  }
 
-      _projector->project(
-			  _projectedCurrentRanges,
-			  _indicesCurrent,
-			  _solver->T,
-			  *_solver->current
-			  );
+  void CorrespondenceFinder2D::compute() {
+    _correspondences.clear();
+    _indicesCurrent.clear();
+    if(_projector == NULL || _solver == NULL) {
+      throw std::runtime_error("Cannot compute correspondences without a projector and a solver");
+    }
 
-      size_t size = std::min(_indicesCurrent.size(), _indicesReference.size());
+    _projector->project(
+			_projectedCurrentRanges,
+			_indicesCurrent,
+			_solver->T,
+			*_solver->current
+			);
 
-      for (size_t i = 0; i < size; i++) {
-	int idx1 = _indicesCurrent[i];
-	int idx2 = _indicesReference[i];
+    size_t size = std::min(_indicesCurrent.size(), _indicesReference.size());
+
+    for (size_t i = 0; i < size; i++) {
+      int idx1 = _indicesCurrent[i];
+      int idx2 = _indicesReference[i];
        
-	if (idx1 < 0 || idx2 < 0)
-	  continue;
+      if (idx1 < 0 || idx2 < 0)
+	continue;
 
-	RichPoint2D pt_curr = (*_solver->current)[idx1];
-	RichPoint2D pt_ref = (*_solver->reference)[idx2];
+      RichPoint2D pt_curr = (*_solver->current)[idx1];
+      RichPoint2D pt_ref = (*_solver->reference)[idx2];
 
-	if((pt_curr.point() - pt_ref.point()).squaredNorm() < 0.09 &&
-	  pt_curr.normal().dot(pt_ref.normal()) > 0.7) {
-	  _correspondences.push_back(i);
-	}
+      if((pt_curr.point() - pt_ref.point()).squaredNorm() < 0.09 &&
+	 pt_curr.normal().dot(pt_ref.normal()) > 0.7) {
+	_correspondences.push_back(i);
       }
-    } else {
-      std::cerr << "Cannot compute correspondences without a projector and a solver" << std::endl;
     }
   }
 

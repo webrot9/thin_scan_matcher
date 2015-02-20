@@ -23,6 +23,18 @@
 #include "tsm_core/solver2d.h"
 
 #include "message_handler.h"
+#include <sys/time.h>
+
+using namespace std;
+
+  inline double tv2sec(struct timeval& tv) { return (double) tv.tv_sec + 1e-6 * (double) tv.tv_usec;}
+
+//! returns the system time in seconds
+double getTime() {
+  struct timeval tv;
+  gettimeofday(&tv, 0);
+  return tv2sec(tv);
+}
 
 inline char float2char(float d) {
   float alpha = 255/10;
@@ -94,6 +106,7 @@ int main(int argc, char **argv) {
     std::list<tsm::Cloud2D*>* clouds = message_handler.clouds();
 
     if (clouds->size() > 0) {
+      double t_start = getTime();
       if (projector == NULL) {
 	projector = message_handler.projector();
 	correspondence_finder.setProjector(projector);
@@ -112,11 +125,11 @@ int main(int argc, char **argv) {
       solver.reference = reference;
       solver.T.setIdentity();
       solver.current = current;
-      solver.computeOmegas();
-      correspondence_finder.compute();
-
-      tsm::UnsignedCharImage correspondences_img;
-      correspondence_finder.drawCorrespondences(correspondences_img);
+      correspondence_finder.init();
+      solver.setReferencePointsHint(correspondence_finder.indicesReference());
+      
+      //tsm::UnsignedCharImage correspondences_img;
+      //correspondence_finder.drawCorrespondences(correspondences_img);
       //cv::imshow("Correspondences", correspondences_img);
 
       clock_t init = clock();
@@ -219,7 +232,7 @@ int main(int argc, char **argv) {
       if(error <= bpr) {
 	tsm::merge(referenceRanges, referenceIndices, *reference,
       		     currentRanges, currentIndices, *current,
-		     0.8f, 0.25f);
+		     1.0f, 0.5f);
 	global_t = global_t * solver.T;
 	reference->transformInPlace(solver.T.inverse());
 
@@ -243,8 +256,12 @@ int main(int argc, char **argv) {
       Eigen::Isometry2f im_tf;
       im_tf.linear() = global_t.linear()*scale;
       im_tf.translation() = (global_t.translation() + Eigen::Vector2f(offset_x, offset_y))*scale;
+      double t_end = getTime();
+      
+      double freq=1./(t_end-t_start);
+      
       reference->draw(show, false, global_t);
-
+      cerr << "points: " << reference->size() << " Hz: " << freq << endl;
       if(show.size().area() > 0) {
 	cv::imshow("LocalMap", show);
       }
@@ -274,8 +291,8 @@ int main(int argc, char **argv) {
       case 1113940: offset_x -= 1; break;
       }
       
-      std::cout << ".";
-      std::cout.flush();
+      //std::cout << ".";
+      //std::cout.flush();
     }
 
     ros::spinOnce();
