@@ -9,6 +9,7 @@
 #include "std_msgs/String.h"
 #include "sensor_msgs/Image.h"
 #include "sensor_msgs/CameraInfo.h"
+#include "nav_msgs/Odometry.h"
 
 // OpenCV
 #include "opencv2/opencv.hpp"
@@ -35,6 +36,7 @@ int main(int argc, char **argv) {
 
   std::string laser_topic;
   std::string camera_topic;
+  std::string published_odom_topic;
   std::string camera_info_topic;
   int frame_skip;
   double bpr;
@@ -50,6 +52,7 @@ int main(int argc, char **argv) {
   
   n.param("laser_topic", laser_topic, std::string("/scan"));
   n.param("camera_topic", camera_topic, std::string("/camera/depth/image_raw"));
+  n.param("published_odom_topic", published_odom_topic, std::string("/odom_calib"));
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.15);
 
@@ -59,6 +62,7 @@ int main(int argc, char **argv) {
   printf("Launched with params:\n");
   printf("_laser_topic:= %s\n", laser_topic.c_str());
   printf("_camera_topic:= %s\n", camera_topic.c_str());
+  printf("_published_odom_topic:= %s\n", published_odom_topic.c_str());
   printf("_frame_skip:= %d\n", frame_skip);
   printf("_bpr:= %f\n", bpr);
   fflush(stdout);
@@ -68,6 +72,7 @@ int main(int argc, char **argv) {
   message_handler.setFrameSkip(frame_skip);
 
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
+  ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(published_odom_topic, 1);
   message_filters::Subscriber<sensor_msgs::Image> camera_sub(n, camera_topic, 100);
   message_filters::Subscriber<sensor_msgs::CameraInfo> camera_info_sub(n, camera_info_topic, 100);
 
@@ -111,7 +116,7 @@ int main(int argc, char **argv) {
 
       tsm::UnsignedCharImage correspondences_img;
       correspondence_finder.drawCorrespondences(correspondences_img);
-      cv::imshow("Correspondences", correspondences_img);
+      //cv::imshow("Correspondences", correspondences_img);
 
     
       for (int i = 0; i < 30; ++i) {
@@ -206,7 +211,7 @@ int main(int argc, char **argv) {
 
       tsm::UnsignedCharImage current_image;
       current->draw(current_image);
-      cv::imshow("Current Image", current_image);
+      //cv::imshow("Current Image", current_image);
 
       if(error <= bpr) {
 	tsm::merge(referenceRanges, referenceIndices, *reference,
@@ -236,10 +241,29 @@ int main(int argc, char **argv) {
       im_tf.linear() = global_t.linear()*scale;
       im_tf.translation() = (global_t.translation() + Eigen::Vector2f(offset_x, offset_y))*scale;
       reference->draw(show, false, global_t);
-      
-      cv::imshow("LocalMap", show);
+
+      if(show.size().area() > 0) {
+	cv::imshow("LocalMap", show);
+      }
+
       int tasto = cv::waitKey(1);
       
+      nav_msgs::Odometry odom_msg;
+      Eigen::Matrix3f rot = Eigen::Matrix3f::Identity();
+      rot.block<2,2>(0, 0) = global_t.linear();
+      Eigen::Quaternionf q(rot);
+ 
+      odom_msg.header.stamp = ros::Time::now();
+      odom_msg.pose.pose.position.x = global_t.translation().x();
+      odom_msg.pose.pose.position.y = global_t.translation().y();
+      odom_msg.pose.pose.position.z = global_t.translation().z();
+      odom_msg.pose.pose.orientation.w = q.w();
+      odom_msg.pose.pose.orientation.x = q.x();
+      odom_msg.pose.pose.orientation.y = q.y();
+      odom_msg.pose.pose.orientation.z = q.z();
+ 
+      odom_pub.publish(odom_msg);
+
       switch(tasto) {
       case '+': scale *=1.1; break;
       case '-': scale /=1.1; break;
