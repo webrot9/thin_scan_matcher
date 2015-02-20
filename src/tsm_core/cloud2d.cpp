@@ -206,7 +206,7 @@ namespace tsm{
     resize(k);
   }
 
-  void Cloud2D::draw(UnsignedCharImage &img, bool draw_normals, Eigen::Isometry2f T) {
+  void Cloud2D::draw(UnsignedCharImage &img, bool draw_normals, Eigen::Isometry2f T, bool draw_pose_origin) {
     std::vector<cv::Point> pt_to_draw;
     std::vector<cv::Point> normal_to_draw;
     int scale = 55;
@@ -225,9 +225,10 @@ namespace tsm{
       pt_to_draw.push_back(cv::Point(pt.x(), pt.y()));
       normal_to_draw.push_back(cv::Point(n.x(), n.y()));
     }
-
+    
     float max_dest_size = std::max(img.rows, img.cols);
     float img_size = std::max(max_value * scale, max_dest_size);
+
     UnsignedCharImage tmp = cv::Mat::zeros(img_size, img_size, CV_8UC1);
     
     for(size_t i = 0; i < pt_to_draw.size(); ++i) {
@@ -249,6 +250,15 @@ namespace tsm{
       tmp.at<uchar>(pt.y, pt.x) = 255;
     }
    
+    cv::circle(tmp,
+	       cv::Point(
+			 T.translation().x() * scale * 0.5 + img_size * 0.5,
+			 T.translation().y() * scale * 0.5 + img_size * 0.5
+			 ),
+	       3,
+	       150,
+	       CV_FILLED);
+
     if (img.size().area() > 0) {
       float max_cols = std::max(img.cols, tmp.cols);
       cv::Rect roi = cv::Rect(
@@ -256,7 +266,6 @@ namespace tsm{
 			      (tmp.rows - img.rows) * 0.5,
 			      img.cols,
 			      img.rows);
-
       tmp(roi) += img;
     }
 

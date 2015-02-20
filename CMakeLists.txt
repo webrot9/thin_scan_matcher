@@ -6,8 +6,11 @@ project(thin_scan_matcher)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  std_msgs
   sensor_msgs
-  tf
+  nav_msgs
+  message_filters
+  cv_bridge
 )
 
 set (CMAKE_BUILD_TYPE Release)

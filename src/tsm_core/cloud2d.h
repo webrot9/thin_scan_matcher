@@ -93,7 +93,7 @@ namespace tsm{
 
     //! clips to a maxRange around a pose
     void clip(float range, const Eigen::Isometry2f& pose=Eigen::Isometry2f::Identity());
-    void draw(UnsignedCharImage& img, bool draw_normals = false, Eigen::Isometry2f T = Eigen::Isometry2f::Identity());
+    void draw(UnsignedCharImage& img, bool draw_normals = false, Eigen::Isometry2f T = Eigen::Isometry2f::Identity(), bool draw_pose_origin = false);
   };
 
 
