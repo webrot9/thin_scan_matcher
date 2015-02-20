@@ -34,8 +34,13 @@ namespace tsm {
     // updates the transform T, the error and the numver of inliers
     void oneRound(const std::vector<int>& correspondences, const IntVector& indicesCurrent, const IntVector& indicesReference);
 
+    //! gives a hint to the system on which omegas need to be recomputed
+    //! needs to be called after setting the reference model
+    void setReferencePointsHint(const std::vector<int>& referencePointsHint);
+
     // computesTheOmegas
-    void computeOmegas();
+    // if no argument is given it updates all omegas, otherwise it updates the omegas of the passed vector of indice  
+    void computeOmegas(const std::vector<int> updateList = std::vector<int>());
     
     virtual ~Solver2D();
     Cloud2D* reference, *current;

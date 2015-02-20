@@ -14,6 +14,7 @@ namespace tsm {
     }
     ~CorrespondenceFinder2D() {};
     void compute();
+    void init();
     inline const std::vector<int>& correspondences() const { return _correspondences; }
     inline const IntVector& indicesCurrent() const { return _indicesCurrent; }
     inline const IntVector& indicesReference() const { return _indicesReference; }

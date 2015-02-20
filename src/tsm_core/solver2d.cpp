@@ -3,6 +3,8 @@
 //#define _GO_PARALLEL_
 //#define _FAST_MULT_
 
+using namespace std;
+
 namespace tsm {
   Solver2D::Solver2D(){
     T.setIdentity();
@@ -41,24 +43,35 @@ namespace tsm {
     J.block<4,1>(0,2) << -tp.y(), tp.x(), -tn.y(), tn.x();
   }
 
-  void Solver2D::computeOmegas() {
+    void Solver2D::setReferencePointsHint(const std::vector<int>& referencePointsHint) {
+      computeOmegas(referencePointsHint);
+    }
+
+  void Solver2D::computeOmegas(const std::vector<int> updateList) {
+    size_t numOmegas;
     size_t referenceSize = reference->size();
-    size_t currentSize = current->size();
     omegaPoints.resize(referenceSize);
     omegaNormals.resize(referenceSize);
 
-#ifdef _GO_PARALLEL_
-#pragma omp parallel for
-#endif
-    for (size_t i = 0; i < referenceSize; ++i) {
-      const Eigen::Vector2f& referencePoint = (*current)[i].point();
-      const Eigen::Vector2f& referenceNormal = (*reference)[i].normal();
+    bool compactCompute = false;
+    if (updateList.size()) {
+      numOmegas = updateList.size();
+      compactCompute = true;
+    } else {
+      numOmegas = reference->size();
+    }
+    for (size_t _i = 0; _i < numOmegas; ++_i) {
+     int idx = compactCompute ? updateList[_i] : _i;
+     if (idx<0)
+       continue;
+     // cerr << "idx: " << idx << endl;
+      const Eigen::Vector2f& referencePoint = (*reference)[idx].point();
+      const Eigen::Vector2f& referenceNormal = (*reference)[idx].normal();
       
-      Eigen::Matrix2f& omegap = omegaPoints[i];
-      Eigen::Matrix2f& omegan = omegaNormals[i];
+      Eigen::Matrix2f& omegap = omegaPoints[idx];
+      Eigen::Matrix2f& omegan = omegaNormals[idx];
       
-      omegap.setIdentity();
-
+      omegap.setZero();
       // if the point has a normal
       if (referenceNormal.squaredNorm()>0) {
 	Eigen::Matrix2f Rn;
