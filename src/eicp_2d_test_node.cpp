@@ -1,5 +1,6 @@
 #include <fstream>
 #include <sstream>
+#include <time.h>
 
 // ROS
 #include "ros/ros.h"
@@ -118,7 +119,7 @@ int main(int argc, char **argv) {
       correspondence_finder.drawCorrespondences(correspondences_img);
       //cv::imshow("Correspondences", correspondences_img);
 
-    
+      clock_t init = clock();
       for (int i = 0; i < 30; ++i) {
 	correspondence_finder.compute();
 	solver.oneRound(
@@ -127,6 +128,8 @@ int main(int argc, char **argv) {
 			correspondence_finder.indicesReference()
 			);
       }
+      clock_t finish = clock() - init;
+      std::cout << "Iteration time: " << double(finish) / CLOCKS_PER_SEC << std::endl;
 
       tsm::FloatVector currentRanges, currentInRefRanges, referenceRanges;
       tsm::IntVector currentIndices, currentInRefIndices, referenceIndices;
