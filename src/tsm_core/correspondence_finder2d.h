@@ -16,9 +16,9 @@ namespace tsm {
     void compute();
     void init();
     inline const std::vector<int>& correspondences() const { return _correspondences; }
-    inline const IntVector& indicesCurrent() const { return _indicesCurrent; }
-    inline const IntVector& indicesReference() const { return _indicesReference; }
-    void drawCorrespondences(UnsignedCharImage& img);
+    inline const IntVector& indicesCurrent() const { return _indices_current; }
+    inline const IntVector& indicesReference() const { return _indices_reference; }
+    void drawCorrespondences(UnsignedCharImage& img) const;
 
     // setter & getter
     inline void setProjector(const Projector2D* projector) { 
@@ -30,8 +30,8 @@ namespace tsm {
   private:
     const Projector2D* _projector;
     const Solver2D* _solver;
-    IntVector _indicesCurrent, _indicesReference;
-    FloatVector _projectedCurrentRanges, _projectedReferenceRanges;
+    IntVector _indices_current, _indices_reference;
+    FloatVector _projected_current_ranges, _projected_reference_ranges;
 
     std::vector<int> _correspondences;
   };

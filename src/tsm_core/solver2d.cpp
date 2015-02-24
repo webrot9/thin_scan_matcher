@@ -1,41 +1,34 @@
 #include "solver2d.h"
 
-//#define _GO_PARALLEL_
-//#define _FAST_MULT_
-
-using namespace std;
-
 namespace tsm {
   Solver2D::Solver2D(){
-    T.setIdentity();
-    maxError = 10;
-    flatOmega << 
+    _T.setIdentity();
+    _flat_omega << 
       100, 0, 
       0, 1e-3;
 
-    longLinearOmega << 
+    _long_linear_omega << 
       1, 0,
       0, 1;
 
-    error = 0;
-    inliers = 0;
-    damping = 0;
+    _chi = 0.f;
+    _max_error = 10.f;
+    _damping = 0.f;
+    _inliers = 0;
+    _inliers_error = 0.f;
   }
 
-  void Solver2D::errorAndJacobian(Eigen::Vector2f&  pointError, 
-				       Eigen::Vector2f&  normalError,
-				       Matrix4_3f&  J, 
-				       const Eigen::Vector2f& referencePoint, 
-				       const Eigen::Vector2f& referenceNormal, 
-				       const Eigen::Vector2f& currentPoint,
-				       const Eigen::Vector2f& currentNormal){
+  void Solver2D::errorAndJacobian(const Eigen::Vector2f& reference_pt, const Eigen::Vector2f& reference_normal,
+				  const Eigen::Vector2f& current_pt, const Eigen::Vector2f& current_normal,
+				  Eigen::Vector2f& pt_error, Eigen::Vector2f& normal_error, Matrix4_3f& J) {
     J.setZero();
-    // apply the transform to the point
-    Eigen::Vector2f tp = T*currentPoint;
-    Eigen::Vector2f tn = T.linear()*currentNormal;
 
-    pointError = tp - referencePoint;
-    normalError = tn - referenceNormal;
+    // apply the transform to the point
+    Eigen::Vector2f tp = _T * current_pt;
+    Eigen::Vector2f tn = _T.linear() * current_normal;
+
+    pt_error = tp - reference_pt;
+    normal_error = tn - reference_pt;
 
     // jacobian of the transform part = [     I(2x2)       0     0
     //                                    -tp.y() tp.x() -tn.y() tn.x()].transpose()
@@ -43,190 +36,176 @@ namespace tsm {
     J.block<4,1>(0,2) << -tp.y(), tp.x(), -tn.y(), tn.x();
   }
 
-    void Solver2D::setReferencePointsHint(const std::vector<int>& referencePointsHint) {
-      computeOmegas(referencePointsHint);
-    }
+  void Solver2D::computeOmegas(const std::vector<int> update_list) {
+    bool compact_compute = false;
+    size_t num_omegas = 0;
+    size_t reference_size = _reference->size();
+    _omega_points.resize(reference_size);
+    _omega_normals.resize(reference_size);
 
-  void Solver2D::computeOmegas(const std::vector<int> updateList) {
-    size_t numOmegas;
-    size_t referenceSize = reference->size();
-    omegaPoints.resize(referenceSize);
-    omegaNormals.resize(referenceSize);
-
-    bool compactCompute = false;
-    if (updateList.size()) {
-      numOmegas = updateList.size();
-      compactCompute = true;
+    if (update_list.size()) {
+      num_omegas = update_list.size();
+      compact_compute = true;
     } else {
-      numOmegas = reference->size();
+      num_omegas = _reference->size();
     }
-    for (size_t _i = 0; _i < numOmegas; ++_i) {
-     int idx = compactCompute ? updateList[_i] : _i;
-     if (idx<0)
-       continue;
-     // cerr << "idx: " << idx << endl;
-      const Eigen::Vector2f& referencePoint = (*reference)[idx].point();
-      const Eigen::Vector2f& referenceNormal = (*reference)[idx].normal();
+
+    for (size_t i = 0; i < num_omegas; ++i) {
+      int idx = compact_compute ? update_list[i] : i;
+
+      if (idx < 0)
+	continue;
+
+      const Eigen::Vector2f& reference_pt = (*_reference)[idx].point();
+      const Eigen::Vector2f& reference_normal = (*_reference)[idx].normal();
       
-      Eigen::Matrix2f& omegap = omegaPoints[idx];
-      Eigen::Matrix2f& omegan = omegaNormals[idx];
-      
-      omegap.setZero();
+      Eigen::Matrix2f& omega_pt = _omega_points[idx];
+      Eigen::Matrix2f& omega_normal = _omega_normals[idx];
+     
+      omega_pt.setZero();
+      omega_normal.setZero();
+
       // if the point has a normal
-      if (referenceNormal.squaredNorm()>0) {
-	Eigen::Matrix2f Rn;
-	Rn << 
-	  referenceNormal.x(), -referenceNormal.y(), 
-	  referenceNormal.y(), referenceNormal.x();
-	omegap += Rn * flatOmega * Rn.transpose();
-	omegan = Rn * longLinearOmega * Rn.transpose();
-      } else {
-	omegan.setZero();
+      if (reference_normal.squaredNorm() > 0) {
+	Eigen::Matrix2f R;
+
+	// Rotate the omega accordingly to the following:
+	// cos(angle_normal), -sin(angle_normal)
+	// sin(angle_normal), cos(angle_normal)
+	R << 
+	  reference_normal.x(), -reference_normal.y(), 
+	  reference_normal.y(), reference_normal.x();
+
+	omega_pt = R * _flat_omega * R.transpose();
+	omega_normal = R * _long_linear_omega * R.transpose();
       }
     }
   }
 
-  void Solver2D::linearize(Eigen::Matrix3f& H, Eigen::Vector3f& b, 
-				float& myerror, float& inliersMyerror, int& inliers,
-				const std::vector<int>& correspondences,
-				const IntVector& indicesCurrent, const IntVector& indicesReference,
-			      	size_t imin, size_t imax){
-    imax = imax > correspondences.size() ? correspondences.size() : imax;
+  void Solver2D::setReferencePointsHint(const std::vector<int>& reference_points_hint) {
+    computeOmegas(reference_points_hint);
+  }
+
+  void Solver2D::linearize(const std::vector<int>& correspondences, const IntVector& indices_current, 
+			   const IntVector& indices_reference, Eigen::Matrix3f& H, Eigen::Vector3f& b,
+			   float& chi, int& inliers, float inliers_error,
+			   size_t imin, size_t imax) {
+    Eigen::Vector2f error_pt;
+    Eigen::Vector2f error_normal;
+    Eigen::Vector4f error;
+    Eigen::Matrix4f omega;
+    Matrix4_3f J;
+
     H.setZero();
     b.setZero();
-    inliersError = 0;
+    omega.setZero();
+
+    chi = 0;
     inliers = 0;
-    Eigen::Vector2f ep;
-    Eigen::Vector2f en;
- 
-    Eigen::Vector4f e;
-    Matrix4_3f J;
-    Eigen::Matrix4f Omega;
-    Omega.setZero();
+    inliers_error = 0;
+
+    imax = imax > correspondences.size() ? correspondences.size() : imax;
 
     for (size_t i = imin; i < imax; ++i) {
-      int current_idx = indicesCurrent[correspondences[i]];
-      int reference_idx = indicesReference[correspondences[i]];
+      int current_idx = indices_current[correspondences[i]];
+      int reference_idx = indices_reference[correspondences[i]];
 
-      const Eigen::Vector2f& currentPoint = (*current)[current_idx].point();
-      const Eigen::Vector2f& currentNormal = (*current)[current_idx].normal();
+      const Eigen::Vector2f& current_pt = (*_current)[current_idx].point();
+      const Eigen::Vector2f& current_normal = (*_current)[current_idx].normal();
 
-      const Eigen::Vector2f& referencePoint = (*reference)[reference_idx].point();
-      const Eigen::Vector2f& referenceNormal = (*reference)[reference_idx].normal();
+      const Eigen::Vector2f& reference_pt = (*_reference)[reference_idx].point();
+      const Eigen::Vector2f& reference_normal = (*_reference)[reference_idx].normal();
 
-      const Eigen::Matrix2f& omegap = omegaPoints[reference_idx];
-      const Eigen::Matrix2f& omegan = omegaNormals[reference_idx];
+      const Eigen::Matrix2f& omega_pt = _omega_points[reference_idx];
+      const Eigen::Matrix2f& omega_normal = _omega_normals[reference_idx];
 
-      errorAndJacobian(ep, en, J, 
-		       referencePoint, referenceNormal, 
-		       currentPoint, currentNormal);
+      errorAndJacobian(reference_pt, reference_normal, current_pt, current_normal,
+		       error_pt, error_normal, J);
 
-      e.block<2,1>(0,0) = ep;
-      e.block<2,1>(2,0) = en;
+      error.block<2,1>(0,0) = error_pt;
+      error.block<2,1>(2,0) = error_normal;
     
-      Omega.block<2,2>(0,0) = omegap;
-      Omega.block<2,2>(2,2) = omegan;
+      omega.block<2,2>(0,0) = omega_pt;
+      omega.block<2,2>(2,2) = omega_normal;
 
       float scale = 1;
-      float chi = e.transpose() * Omega * e;
-      error = e.transpose() * e;
-      if (chi > maxError) {
-	scale = maxError / chi;
-	inliersVector[i] = false;
+      chi = error.transpose() * omega * error;
+
+      if (chi > _max_error) {
+	scale = _max_error / chi;
+	_inliers_vector[i] = false;
       } else {
-	inliers++;
-	inliersVector[i] = true;
-	inliersError += ep.squaredNorm();
+	++inliers;
+	_inliers_vector[i] = true;
+	inliers_error += error_pt.squaredNorm();
       }
 
-      Omega *= scale;
-#ifdef NAN_CHECK
-      Matrix3f Hi=J.transpose()*Omega*J;
-      Vector3f bi=J.transpose()*Omega*e;
-      if (isNan(Hi)) {
-	cerr << endl;
-	cerr << Hi;
-	cerr << "J" << endl << J << endl;
-	cerr << "Omega" << endl << Omega << endl;
-	cerr << "e" << endl << e << endl;
+      omega *= scale;
+
+      Eigen::Matrix3f Hi = J.transpose() * omega * J;
+      Eigen::Vector3f bi = J.transpose() * omega * error;
+
+      if (isNan(Hi) || isNan(bi)) {
 	throw std::runtime_error("NAN detected");
       }
-#endif
 
-      H.noalias() += J.transpose()*Omega*J;
-      b.noalias() += J.transpose()*Omega*e;
+      H.noalias() += J.transpose() * omega * J;
+      b.noalias() += J.transpose() * omega * error;
     }
   }
     
-  void Solver2D::oneRound(const std::vector<int>& correspondences, const IntVector& indicesCurrent, const IntVector& indicesReference){
-    inliersVector.resize(reference->size(), false);
+  void Solver2D::optimize(const std::vector<int>& correspondences, 
+			  const IntVector& indices_current, const IntVector& indices_reference) {
+    size_t num_points = correspondences.size();
     Eigen::Matrix3f H = Eigen::Matrix3f::Zero();
     Eigen::Vector3f b = Eigen::Vector3f::Zero();
-    error = 0;
-    inliers = 0;
-    inliersError = 0;
-    size_t numPoints = correspondences.size();
-#ifdef _GO_PARALLEL_
-    int numThreads = omp_get_max_threads();
-    int iterationsPerThread = numPoints / numThreads;
 
-#pragma omp parallel num_threads(numThreads)
+    _inliers_vector.resize(_reference->size(), false);
+    _chi = 0;
+    _inliers = 0;
+    _inliers_error = 0;
+
+#ifdef _GO_PARALLEL_
+    int num_threads = omp_get_max_threads();
+    int iterations_per_thread = num_points / num_threads;
+
+#pragma omp parallel num_threads(num_threads)
     {
-      int threadId = omp_get_thread_num();
-      int imin = iterationsPerThread * threadId;
-      int imax = imin + iterationsPerThread;
+      int thread_id = omp_get_thread_num();
+      int imin = iterations_per_thread * thread_id;
+      int imax = imin + iterations_per_thread;
 
       Eigen::Matrix3f tH; 
       Eigen::Vector3f tb; 
-      float terror = 0;
-      float tinliersError = 0;
+      float tchi = 0;
+      float tinliers_error = 0;
       int tinliers = 0;
-      linearize(
-		tH,
-		tb,
-		terror,
-		tinliersError,
-		tinliers,
-		correspondences,
-		indicesCurrent,
-		indicesReference,
-		imin,
-		imax
-		);
+      linearize(correspondences, indices_current, indices_reference,
+		tH, tb, tchi, tinliers, tinliers_error,	imin, imax);
 
 #pragma omp critical 
       {
 	H += tH;
 	b += tb;
-	inliers += tinliers;
-	inliersError += tinliersError;
-	error += terror;
+	_inliers += tinliers;
+	_inliers_error += tinliers_error;
+	_chi += tchi;
       }
     }
 #else
-    linearize(
-	      H,
-	      b,
-	      error,
-	      inliersError,
-	      inliers,
-	      correspondences,
-	      indicesCurrent,
-	      indicesReference,
-	      0,
-	      numPoints
-	      );
+    linearize(correspondences, indices_current, indices_reference,
+	      H, b, _chi, _inliers, _inliers_error, 0, num_points);
 #endif
 
-    H += damping*Eigen::Matrix3f::Identity();
+    H += _damping * Eigen::Matrix3f::Identity();
 
     Eigen::Vector3f dt = H.ldlt().solve(-b);
-    T = v2t(dt)*T;
-    Eigen::Matrix2f R = T.linear();
+    _T = v2t(dt) * _T;
+
+    // Normalization of the rotation matrix
+    Eigen::Matrix2f R = _T.linear();
     Eigen::Matrix2f E = R.transpose() * R;
     E.diagonal().array() -= 1;
-    T.linear() -= 0.5 * R * E;
+    _T.linear() -= 0.5 * R * E;
   }
-
-  Solver2D::~Solver2D(){}
 }
