@@ -115,8 +115,8 @@ namespace tsm {
 			    1.f, 0.5f);
 
       _global_t = _global_t * _solver->T();
-      _reference->clip(7.f, Eigen::Isometry2f::Identity());
-      _reference->voxelize(*_reference, 0.1);
+      _reference->clip(10.f, Eigen::Isometry2f::Identity());
+      _reference->voxelize(*_reference, 1);
       _reference->transformInPlace(_solver->T().inverse());
 
       if (_reference != _current)
