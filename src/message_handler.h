@@ -12,6 +12,11 @@
 #include "tsm_core/cloud2d.h"
 #include "tsm_core/projector2d.h"
 
+struct CloudWithTime {
+  ros::Time timestamp;
+  tsm::Cloud2D* data;
+};
+
 class MessageHandler {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -43,12 +48,17 @@ class MessageHandler {
       _laser_projector->setNumRanges(msg->ranges.size());
     }
 
-    tsm::Cloud2D *current = NULL;
-    current = new tsm::Cloud2D();
+    CloudWithTime *current = NULL;
+    tsm::Cloud2D *current_data = NULL;
+    current = new CloudWithTime();
+    current_data = new tsm::Cloud2D();
 
-    _laser_projector->unproject(*current, msg->ranges);
+    _laser_projector->unproject(*current_data, msg->ranges);
 
-    if(current != NULL)
+    current->timestamp = msg->header.stamp;
+    current->data = current_data;
+
+    if(current_data != NULL && current != NULL)
       _clouds.push_back(current);
   }
   
@@ -74,12 +84,17 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
     _camera_projector->setNumRanges(depth_image.cols);
   }
 
-  tsm::Cloud2D *current = NULL;
-  current = new tsm::Cloud2D();
+  CloudWithTime *current = NULL;
+  tsm::Cloud2D *current_data = NULL;
+  current = new CloudWithTime();
+  current_data = new tsm::Cloud2D();
 
-  _camera_projector->unproject(*current, depth_image, camera_matrix, Eigen::Isometry3f::Identity());
+  _camera_projector->unproject(*current_data, depth_image, camera_matrix, Eigen::Isometry3f::Identity());
 
-  if(current != NULL)
+  current->timestamp = image->header.stamp;
+  current->data = current_data;
+
+  if(current_data != NULL && current != NULL)
     _clouds.push_back(current);
 }
   // setter & getter
@@ -87,8 +102,8 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
   inline int frameSkip() const { return _frame_skip; }
   inline int laserFrameCount() const { return _laser_frame_count; }
   inline int cameraFrameCount() const { return _camera_frame_count; }
-  inline std::list<tsm::Cloud2D*>* clouds()  { return &_clouds; }
-  inline tsm::Projector2D* projector()  { 
+  inline std::list<CloudWithTime*>* clouds()  { return &_clouds; }
+  inline tsm::Projector2D* projector() {
     if (_camera_projector != NULL) return _camera_projector;
 
     return _laser_projector;
@@ -96,7 +111,7 @@ void camera_callback(const sensor_msgs::Image::ConstPtr& image,
  private:
   tsm::Projector2D* _laser_projector;
   tsm::Projector2D* _camera_projector;
-  std::list<tsm::Cloud2D*> _clouds;
+  std::list<CloudWithTime*> _clouds;
   int _laser_frame_count;
   int _camera_frame_count;
   int _frame_skip;
