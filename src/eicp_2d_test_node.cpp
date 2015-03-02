@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
   Eigen::Isometry2f global_t;
 
   while (ros::ok()) {
-    std::list<tsm::Cloud2D*>* clouds = message_handler.clouds();
+    std::list<CloudWithTime*>* clouds = message_handler.clouds();
 
     if (clouds->size() > 0) {
       if (projector == NULL) {
@@ -89,7 +89,8 @@ int main(int argc, char **argv) {
 	tracker.setProjector(projector);
       }
 
-      cloud = clouds->front();
+      ros::Time timestamp = clouds->front()->timestamp;
+      cloud = clouds->front()->data;
       clouds->pop_front();
 
       tracker.update(cloud);
@@ -100,7 +101,7 @@ int main(int argc, char **argv) {
       rot.block<2,2>(0, 0) = global_t.linear();
       Eigen::Quaternionf q(rot);
  
-      odom_msg.header.stamp = ros::Time::now();
+      odom_msg.header.stamp = timestamp;
       odom_msg.pose.pose.position.x = global_t.translation().x();
       odom_msg.pose.pose.position.y = global_t.translation().y();
       odom_msg.pose.pose.position.z = 0;
