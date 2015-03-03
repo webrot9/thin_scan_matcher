@@ -46,7 +46,7 @@ namespace tsm {
       RichPoint2D pt_ref = (*_solver->reference())[idx2];
 
       if((pt_curr.point() - pt_ref.point()).squaredNorm() < 0.09 &&
-	 pt_curr.normal().dot(pt_ref.normal()) > 0.7) {
+	 pt_curr.normal().dot(pt_ref.normal()) > 0.8) {
 	_correspondences.push_back(i);
       }
     }

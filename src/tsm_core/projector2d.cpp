@@ -125,7 +125,7 @@ namespace tsm {
   }
 
   void Projector2D::unproject(Cloud2D& model, const FloatVector& ranges) {
-    float dist = 0.01;
+    float dist = 0.02;
     int minPoints = 3;
     Eigen::Vector2f mean;
     Eigen::Matrix2f cov;
