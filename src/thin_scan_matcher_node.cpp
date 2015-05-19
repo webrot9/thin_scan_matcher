@@ -29,11 +29,16 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "tsm_test_node");
 
   std::string laser_topic;
-  std::string camera_topic;
   std::string published_odom_topic;
-  std::string camera_info_topic;
+  std::string published_tf_origin_frame_id;
+  std::string published_tf_destination_frame_id;
+  std::string current_map_topic;
+  std::string reference_map_topic;
+  std::string base_link_frame_id;
   int frame_skip;
   double bpr;
+  bool publish_odom;
+  bool publish_tf;
 
   MessageHandler message_handler;
   tsm::Solver2D solver;
@@ -45,25 +50,37 @@ int main(int argc, char **argv) {
   
   // ROS parameters setting
   n.param("laser_topic", laser_topic, std::string("/scan"));
-  n.param("camera_topic", camera_topic, std::string("/camera/depth/image_raw"));
   n.param("published_odom_topic", published_odom_topic, std::string("/odom_calib"));
+  n.param("base_link_frame_id", base_link_frame_id, std::string("/base_link"));
+  n.param("published_tf_origin_frame_id", published_tf_origin_frame_id, std::string("/tsm_frame"));
+  n.param("published_tf_destination_frame_id", published_tf_destination_frame_id, std::string("/base_link"));
+  n.param("current_map_topic", current_map_topic, std::string("current_map"));
+  n.param("reference_map_topic", reference_map_topic, std::string("reference_map"));
+  n.param("publish_odom", publish_odom, true);
+  n.param("publish_tf", publish_tf, false);
+
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.15);
-
+  
   if (frame_skip <= 0)
     frame_skip = 1;
 
   printf("Launched with params:\n");
   printf("_laser_topic:= %s\n", laser_topic.c_str());
-  printf("_camera_topic:= %s\n", camera_topic.c_str());
   printf("_published_odom_topic:= %s\n", published_odom_topic.c_str());
   printf("_frame_skip:= %d\n", frame_skip);
   printf("_bpr:= %f\n", bpr);
+  printf("_base_link_frame_id:=%s\n", base_link_frame_id.c_str());
+  printf("_published_tf_origin_frame_id:=%s\n", published_tf_origin_frame_id.c_str());
+  printf("_published_tf_destination_frame_id:=%s\n", published_tf_destination_frame_id.c_str());
+  printf("_current_map_topic:=%s\n", current_map_topic.c_str());
+  printf("_reference_map_topic:=%s\n", reference_map_topic.c_str());
+  printf("_publish_odom:=%d\n", publish_odom);
+  printf("_publish_tf:=%d\n", publish_tf);
+ 
   fflush(stdout);
 
   // Setting input parameters
-  unsigned found = camera_topic.find_last_of("/");
-  camera_info_topic = camera_topic.substr(0, found) + "/camera_info";
   message_handler.setFrameSkip(frame_skip);
   tracker.setBpr(bpr);
 
@@ -72,12 +89,6 @@ int main(int argc, char **argv) {
   // ROS topic subscriptions
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
   ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(published_odom_topic, 1);
-  message_filters::Subscriber<sensor_msgs::Image> camera_sub(n, camera_topic, 100);
-  message_filters::Subscriber<sensor_msgs::CameraInfo> camera_info_sub(n, camera_info_topic, 100);
-
-  typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::CameraInfo> MySyncPolicy;
-  message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(30), camera_sub, camera_info_sub);
-  sync.registerCallback(boost::bind(&MessageHandler::camera_callback, &message_handler, _1, _2));
 
   CloudWithTime *cloud = 0;
   Eigen::Isometry2f global_t;

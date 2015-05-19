@@ -10,7 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   nav_msgs
   message_filters
-  cv_bridge
 )
 
 set (CMAKE_BUILD_TYPE Release)
