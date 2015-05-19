@@ -15,8 +15,7 @@ namespace tsm {
     //! The clouds should be aligned, then
     //! points that are closer than distanceThreshold are merged based on the scaling values
     //! if the normals are compatible
-    void merge(
-	       FloatVector& dest_ranges,
+    void merge(FloatVector& dest_ranges,
 	       IntVector& dest_indices,
 	       Cloud2D& dest,
 	       FloatVector& src_ranges,

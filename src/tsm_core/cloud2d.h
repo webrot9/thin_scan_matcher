@@ -71,5 +71,7 @@ namespace tsm {
     void draw(UnsignedCharImage& img, bool draw_normals = false,
 	      Eigen::Isometry2f T = Eigen::Isometry2f::Identity(),
 	      bool draw_pose_origin = false) const;
+
+    virtual ~Cloud2D();
   };
 }

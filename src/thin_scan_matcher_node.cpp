@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
   MessageHandler message_handler;
   tsm::Solver2D solver;
-  tsm::Projector2D* projector = NULL;
+  tsm::Projector2D* projector = 0;
   tsm::Tracker tracker;
   tracker.setSolver(&solver);
 
@@ -67,6 +67,8 @@ int main(int argc, char **argv) {
   message_handler.setFrameSkip(frame_skip);
   tracker.setBpr(bpr);
 
+  std::cerr << "Tracker allocated" << std::endl;
+  
   // ROS topic subscriptions
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
   ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(published_odom_topic, 1);
@@ -77,22 +79,27 @@ int main(int argc, char **argv) {
   message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(30), camera_sub, camera_info_sub);
   sync.registerCallback(boost::bind(&MessageHandler::camera_callback, &message_handler, _1, _2));
 
-  tsm::Cloud2D *cloud = NULL;
+  CloudWithTime *cloud = 0;
   Eigen::Isometry2f global_t;
 
-  while (ros::ok()) {
-    std::list<CloudWithTime*>* clouds = message_handler.clouds();
+  std::cerr << "Entering ROS loop" << std::endl;
 
-    if (clouds->size() > 0) {
-      if (projector == NULL) {
+  while (ros::ok()) {
+    //std::cerr << "loopig" << std::endl;
+
+    std::list<CloudWithTime*>& clouds = message_handler.clouds();
+
+    if (clouds.size() > 0) {
+      if (projector == 0) {
 	projector = message_handler.projector();
 	tracker.setProjector(projector);
       }
+      
+      CloudWithTime* cloud = clouds.front();
+      ros::Time timestamp = cloud->timestamp;
+      clouds.pop_front();
 
-      ros::Time timestamp = clouds->front()->timestamp;
-      cloud = clouds->front()->data;
-      clouds->pop_front();
-
+      
       tracker.update(cloud);
       global_t = tracker.globalT();
 
@@ -114,6 +121,7 @@ int main(int argc, char **argv) {
     }
 
     ros::spinOnce();
+    //usleep(10000);
   }
 
   return 0;

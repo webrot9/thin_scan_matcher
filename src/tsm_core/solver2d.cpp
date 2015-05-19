@@ -1,6 +1,8 @@
 #include "solver2d.h"
 
 namespace tsm {
+  using namespace std;
+
   Solver2D::Solver2D(){
     _T.setIdentity();
     _flat_omega << 
@@ -165,37 +167,9 @@ namespace tsm {
     _inliers = 0;
     _inliers_error = 0;
 
-#ifdef _GO_PARALLEL_
-    int num_threads = omp_get_max_threads();
-    int iterations_per_thread = num_points / num_threads;
-
-#pragma omp parallel num_threads(num_threads)
-    {
-      int thread_id = omp_get_thread_num();
-      int imin = iterations_per_thread * thread_id;
-      int imax = imin + iterations_per_thread;
-
-      Eigen::Matrix3f tH; 
-      Eigen::Vector3f tb; 
-      float tchi = 0;
-      float tinliers_error = 0;
-      int tinliers = 0;
-      linearize(correspondences, indices_current, indices_reference,
-		tH, tb, tchi, tinliers, tinliers_error,	imin, imax);
-
-#pragma omp critical 
-      {
-	H += tH;
-	b += tb;
-	_inliers += tinliers;
-	_inliers_error += tinliers_error;
-	_chi += tchi;
-      }
-    }
-#else
+    //cerr << "optimize" << endl;
     linearize(correspondences, indices_current, indices_reference,
 	      H, b, _chi, _inliers, _inliers_error, 0, num_points);
-#endif
 
     H += _damping * Eigen::Matrix3f::Identity();
 

@@ -4,7 +4,7 @@
 
 namespace tsm {
   Projector2D::Projector2D() {
-    _sct = NULL;
+    _sct = 0;
     _max_range = 30;
     _min_range = 0.1;
     _num_ranges = 1024;
@@ -15,14 +15,14 @@ namespace tsm {
   void Projector2D::updateParameters() {
     _angle_increment = _fov / _num_ranges;
 
-    if (_sct == NULL)
+    if (_sct == 0)
       _sct = new SinCosTable(-_fov * 0.5, _angle_increment, _num_ranges);
     else
       *_sct = SinCosTable(-_fov * 0.5, _angle_increment, _num_ranges);
   }
 
   Projector2D::~Projector2D() {
-    if (_sct)
+    if (_sct) 
       delete _sct;
   }
 

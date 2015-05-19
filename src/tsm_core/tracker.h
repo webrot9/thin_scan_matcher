@@ -16,11 +16,7 @@ namespace tsm {
   public:
     Tracker();
     virtual ~Tracker();
-    void update();
-    inline void update(Cloud2D* cloud) {
-      setCurrent(cloud);
-      update();
-    }
+    void update(Cloud2D* cloud=0);
     inline void reset();
 
     // setter & getter
@@ -32,15 +28,9 @@ namespace tsm {
     inline const Cloud2D* current() const { return _current; }
     inline void setCurrent(Cloud2D* current) { _current = current; }
     inline const Solver2D* solver() const { return _solver; }
-    inline void setSolver(Solver2D* solver) {
-      _solver = solver;
-      _correspondence_finder.setSolver(_solver);
-    }
+    void setSolver(Solver2D* solver);
     inline const Projector2D* projector() const { return _projector; }
-    inline void setProjector(Projector2D* projector) { 
-      _projector = projector;
-      _correspondence_finder.setProjector(_projector);
-    }
+    void setProjector(Projector2D* projector);
     inline const CorrespondenceFinder2D* correspondenceFinder() const { return &_correspondence_finder; }
   private:
     int _iterations;

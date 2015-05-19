@@ -14,12 +14,18 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 set (CMAKE_BUILD_TYPE Release)
+#RASPBERRY PI 2 FLAGS
+if ($ENV{HOSTTYPE} MATCHES "arm")
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funsafe-math-optimizations")
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funsafe-math-optimizations")
+endif ()
 
 FIND_PACKAGE(OpenCV)
 INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
-FIND_PACKAGE(Eigen3 REQUIRED)
-INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
+#FIND_PACKAGE(Eigen3 REQUIRED)
+#INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(/usr/include/eigen3)
 INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/src)
 
 ## System dependencies are found with CMake's conventions

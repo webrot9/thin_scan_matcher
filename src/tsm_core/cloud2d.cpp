@@ -164,4 +164,8 @@ namespace tsm{
 
     img = tmp;
   }
+
+
+  Cloud2D::~Cloud2D(){}
+
 }

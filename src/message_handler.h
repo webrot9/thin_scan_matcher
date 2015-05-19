@@ -12,9 +12,12 @@
 #include "tsm_core/cloud2d.h"
 #include "tsm_core/projector2d.h"
 
-struct CloudWithTime {
+struct CloudWithTime: public tsm::Cloud2D {
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  CloudWithTime(const ros::Time& t){
+    timestamp=t;
+  }
   ros::Time timestamp;
-  tsm::Cloud2D* data;
 };
 
 class MessageHandler {
@@ -48,61 +51,54 @@ class MessageHandler {
       _laser_projector->setNumRanges(msg->ranges.size());
     }
 
+    CloudWithTime* current = new CloudWithTime(msg->header.stamp);
+    _laser_projector->unproject(*current, msg->ranges);
+    _clouds.push_back(current);
+  }
+  
+  void camera_callback(const sensor_msgs::Image::ConstPtr& image,
+		       const sensor_msgs::CameraInfo::ConstPtr& camera_info) {
+    /*
+    ++_camera_frame_count;
+    Eigen::Matrix3f camera_matrix;
+    cv_bridge::CvImagePtr cvImagePtr = cv_bridge::toCvCopy(image);  
+    tsm::UnsignedShortImage depth_image = cvImagePtr->image;
+
+    for(int r = 0; r < 3; r++)
+      for(int c = 0; c < 3; c++)
+	camera_matrix(r, c) = camera_info->K[c + r * 3];
+
+    if (_camera_frame_count % _frame_skip != 0)
+      return;
+
+    if (_camera_projector == NULL) {
+      _camera_projector = new tsm::Projector2D();
+      _camera_projector->setMaxRange(5.0);
+      _camera_projector->setMinRange(0.20);
+      _camera_projector->setFov(2*atan2(camera_matrix(0, 2), camera_matrix(0, 0)));
+      _camera_projector->setNumRanges(depth_image.cols);
+    }
+
     CloudWithTime *current = NULL;
     tsm::Cloud2D *current_data = NULL;
     current = new CloudWithTime();
     current_data = new tsm::Cloud2D();
 
-    _laser_projector->unproject(*current_data, msg->ranges);
+    _camera_projector->unproject(*current_data, depth_image, camera_matrix, Eigen::Isometry3f::Identity());
 
-    current->timestamp = msg->header.stamp;
+    current->timestamp = image->header.stamp;
     current->data = current_data;
 
     if(current_data != NULL && current != NULL)
       _clouds.push_back(current);
+    */
   }
-  
-void camera_callback(const sensor_msgs::Image::ConstPtr& image,
-		       const sensor_msgs::CameraInfo::ConstPtr& camera_info) {
-  ++_camera_frame_count;
-  Eigen::Matrix3f camera_matrix;
-  cv_bridge::CvImagePtr cvImagePtr = cv_bridge::toCvCopy(image);  
-  tsm::UnsignedShortImage depth_image = cvImagePtr->image;
-
-  for(int r = 0; r < 3; r++)
-    for(int c = 0; c < 3; c++)
-      camera_matrix(r, c) = camera_info->K[c + r * 3];
-
-  if (_camera_frame_count % _frame_skip != 0)
-    return;
-
-  if (_camera_projector == NULL) {
-    _camera_projector = new tsm::Projector2D();
-    _camera_projector->setMaxRange(5.0);
-    _camera_projector->setMinRange(0.20);
-    _camera_projector->setFov(2*atan2(camera_matrix(0, 2), camera_matrix(0, 0)));
-    _camera_projector->setNumRanges(depth_image.cols);
-  }
-
-  CloudWithTime *current = NULL;
-  tsm::Cloud2D *current_data = NULL;
-  current = new CloudWithTime();
-  current_data = new tsm::Cloud2D();
-
-  _camera_projector->unproject(*current_data, depth_image, camera_matrix, Eigen::Isometry3f::Identity());
-
-  current->timestamp = image->header.stamp;
-  current->data = current_data;
-
-  if(current_data != NULL && current != NULL)
-    _clouds.push_back(current);
-}
   // setter & getter
   inline void setFrameSkip(int frame_skip) { _frame_skip = frame_skip; }
   inline int frameSkip() const { return _frame_skip; }
   inline int laserFrameCount() const { return _laser_frame_count; }
   inline int cameraFrameCount() const { return _camera_frame_count; }
-  inline std::list<CloudWithTime*>* clouds()  { return &_clouds; }
+  inline std::list<CloudWithTime*>& clouds()  { return _clouds; }
   inline tsm::Projector2D* projector() {
     if (_camera_projector != NULL) return _camera_projector;
 
