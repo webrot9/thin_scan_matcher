@@ -27,6 +27,7 @@ namespace tsm {
     _solver = 0;
     _projector = 0;
     _correspondence_finder = 0;
+    _inlier_distance = 0.1;
   }
 
   void Tracker::setSolver(Solver2D* solver) {
@@ -103,14 +104,14 @@ namespace tsm {
 
 	mean_dist += diff;
 
-	if (diff < 0.10)
+	if (diff < _inlier_distance)
 	  ++inliers;
 	else
 	  ++outliers;
       }
     }
 
-    if (num_points/size < 0.05) {
+    if (num_points/size < _bpr) {
       if(_current && _current != _reference) {
 	cerr << "bad num points, current: " << _current 
 	     << " size: " << _current->size()

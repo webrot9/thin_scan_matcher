@@ -32,9 +32,12 @@ namespace tsm {
     inline const Projector2D* projector() const { return _projector; }
     void setProjector(Projector2D* projector);
     inline const CorrespondenceFinder2D* correspondenceFinder() const { return &_correspondence_finder; }
+    inline void setInlierDistance(float inlier_distance){_inlier_distance=inlier_distance;}
+    inline float inlierDistance()const {return _inlier_distance;}
   private:
     int _iterations;
     float _bpr;
+    float _inlier_distance;
     Eigen::Isometry2f _global_t;
     Cloud2D *_reference, *_current;
     Solver2D *_solver;

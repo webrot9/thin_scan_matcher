@@ -35,6 +35,7 @@ int main(int argc, char **argv) {
   std::string current_map_topic;
   std::string reference_map_topic;
   std::string base_link_frame_id;
+  double inlier_distance;
   int frame_skip;
   double bpr;
   bool publish_odom;
@@ -58,7 +59,7 @@ int main(int argc, char **argv) {
   n.param("reference_map_topic", reference_map_topic, std::string("reference_map"));
   n.param("publish_odom", publish_odom, true);
   n.param("publish_tf", publish_tf, false);
-
+  n.param("inlier_distance", inlier_distance,0.1);
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.15);
   
@@ -77,15 +78,16 @@ int main(int argc, char **argv) {
   printf("_reference_map_topic:=%s\n", reference_map_topic.c_str());
   printf("_publish_odom:=%d\n", publish_odom);
   printf("_publish_tf:=%d\n", publish_tf);
- 
+  printf ("_inlier_distance:=%f\n", inlier_distance);
   fflush(stdout);
 
   // Setting input parameters
   message_handler.setFrameSkip(frame_skip);
   tracker.setBpr(bpr);
-
-  std::cerr << "Tracker allocated" << std::endl;
+  tracker.setInlierDistance(inlier_distance);
   
+  std::cerr << "Tracker allocated" << std::endl;
+  std::cerr<< "inlier distance from tracker: "<<tracker.inlierDistance()<<std::endl;
   // ROS topic subscriptions
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
   ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(published_odom_topic, 1);
@@ -120,6 +122,7 @@ int main(int argc, char **argv) {
       Eigen::Quaternionf q(rot);
  
       odom_msg.header.stamp = timestamp;
+      odom_msg.header.frame_id = "/odom";
       odom_msg.pose.pose.position.x = global_t.translation().x();
       odom_msg.pose.pose.position.y = global_t.translation().y();
       odom_msg.pose.pose.position.z = 0;
