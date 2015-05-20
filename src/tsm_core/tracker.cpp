@@ -28,6 +28,7 @@ namespace tsm {
     _projector = 0;
     _correspondence_finder = 0;
     _inlier_distance = 0.1;
+    _min_correspondences_ratio = 0.5;
   }
 
   void Tracker::setSolver(Solver2D* solver) {
@@ -45,7 +46,7 @@ namespace tsm {
     if (cloud_)
       setCurrent(cloud_);
     double init = getTime();
-    float num_points = 0;
+    float num_correspondences = 0;
     float outliers = 0;
     float inliers = 0;
     float mean_dist = 0;
@@ -99,7 +100,7 @@ namespace tsm {
       float diff = 0;
 
       if (ref_idx >= 0 && curr_idx >= 0){
-	++num_points;
+	++num_correspondences;
 	diff = std::fabs(current_ranges[c] - reference_ranges[c]);
 
 	mean_dist += diff;
@@ -110,12 +111,13 @@ namespace tsm {
 	  ++outliers;
       }
     }
-
-    if (num_points/size < _bpr) {
+    float correspondences_ratio  = (float)num_correspondences/(float)_current->size();
+    if (correspondences_ratio < _min_correspondences_ratio) {
       if(_current && _current != _reference) {
-	cerr << "bad num points, current: " << _current 
+	cerr << "too few correspondences, current: " << _current 
 	     << " size: " << _current->size()
-	     << " num_points: " << num_points << endl;
+	     << " num_correspondences: " << num_correspondences 
+	     << " ratio: " << correspondences_ratio << endl;
 	//cerr << "deleting current (" << _current << ")" << endl;
 	delete _current;
 	//cerr << "done" << endl;
@@ -124,8 +126,8 @@ namespace tsm {
       return;
     }
 
-    mean_dist /= num_points;
-    float error = outliers/num_points;
+    mean_dist /= num_correspondences;
+    float error = outliers/num_correspondences;
 
     if (error <= _bpr) {
       //cerr << "merging... ";
@@ -135,7 +137,7 @@ namespace tsm {
 
       _global_t = _global_t * _solver->T();
       _reference->clip(10.f, Eigen::Isometry2f::Identity());
-      _reference->voxelize(*_reference, 2);
+      //_reference->voxelize(*_reference, 2);
       _reference->transformInPlace(_solver->T().inverse());
 
       //cerr << "done" << endl;

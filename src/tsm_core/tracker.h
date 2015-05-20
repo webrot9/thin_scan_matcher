@@ -34,10 +34,15 @@ namespace tsm {
     inline const CorrespondenceFinder2D* correspondenceFinder() const { return &_correspondence_finder; }
     inline void setInlierDistance(float inlier_distance){_inlier_distance=inlier_distance;}
     inline float inlierDistance()const {return _inlier_distance;}
+
+    inline void setMinCorrespondencesRatio(float cr){_min_correspondences_ratio=cr;}
+    inline float minCorrespondencesRatio()const {return _min_correspondences_ratio;}
+
   private:
     int _iterations;
     float _bpr;
     float _inlier_distance;
+    float _min_correspondences_ratio;
     Eigen::Isometry2f _global_t;
     Cloud2D *_reference, *_current;
     Solver2D *_solver;

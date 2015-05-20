@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
   double bpr;
   bool publish_odom;
   bool publish_tf;
+  double min_correspondences_ratio;
 
   MessageHandler message_handler;
   tsm::Solver2D solver;
@@ -62,6 +63,7 @@ int main(int argc, char **argv) {
   n.param("inlier_distance", inlier_distance,0.1);
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.15);
+  n.param("min_correspondences_ratio", min_correspondences_ratio, 0.5);
   
   if (frame_skip <= 0)
     frame_skip = 1;
@@ -79,13 +81,14 @@ int main(int argc, char **argv) {
   printf("_publish_odom:=%d\n", publish_odom);
   printf("_publish_tf:=%d\n", publish_tf);
   printf ("_inlier_distance:=%f\n", inlier_distance);
+  printf ("_min_correspondences_ratio:=%f\n", min_correspondences_ratio);
   fflush(stdout);
 
   // Setting input parameters
   message_handler.setFrameSkip(frame_skip);
   tracker.setBpr(bpr);
   tracker.setInlierDistance(inlier_distance);
-  
+  tracker.setMinCorrespondencesRatio(min_correspondences_ratio);
   std::cerr << "Tracker allocated" << std::endl;
   std::cerr<< "inlier distance from tracker: "<<tracker.inlierDistance()<<std::endl;
   // ROS topic subscriptions
