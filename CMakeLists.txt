@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   nav_msgs
   message_filters
+  tf
 )
 
 set (CMAKE_BUILD_TYPE Release)

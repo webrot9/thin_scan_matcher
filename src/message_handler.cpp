@@ -6,7 +6,10 @@ MessageHandler::MessageHandler() {
   _frame_skip = 1;
 }
 
-MessageHandler::~MessageHandler() {}
+MessageHandler::~MessageHandler() {
+  if (_projector)
+    delete _projector;
+}
 
 void MessageHandler::laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg) {
   ++_frame_count;
@@ -18,7 +21,7 @@ void MessageHandler::laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg)
     float fov = 0.f;
     fov = msg->angle_increment * msg->ranges.size();
     _projector = new tsm::Projector2D();
-    _projector->setMaxRange(10.f);
+    _projector->setMaxRange(msg->range_max);
     _projector->setMinRange(msg->range_min);
     _projector->setFov(fov);
     _projector->setNumRanges(msg->ranges.size());

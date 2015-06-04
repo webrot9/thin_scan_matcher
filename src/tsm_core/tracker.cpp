@@ -1,8 +1,6 @@
 #include "tracker.h"
 
 namespace tsm {
-  using namespace std;
-
   inline double tv2sec(struct timeval& tv) {
     return (double) tv.tv_sec + 1e-6 * (double) tv.tv_usec;
   }
@@ -29,6 +27,8 @@ namespace tsm {
     _correspondence_finder = 0;
     _inlier_distance = 0.1;
     _min_correspondences_ratio = 0.5;
+    _local_map_clipping_range = 10;
+    _clip_translation_threshold = 5;
   }
 
   void Tracker::setSolver(Solver2D* solver) {
@@ -53,11 +53,10 @@ namespace tsm {
     FloatVector current_ranges, current_in_ref_ranges, reference_ranges;
     IntVector current_indices, current_in_ref_indices, reference_indices;
 
-    //std::cerr <<  "tracker update " <<  _reference << " " << _current << std::endl; 
-
     if (! _reference) {
       _reference = _current;
       _global_t.setIdentity();
+      _last_clipped_pose = _global_t;
       std::cerr <<  "1st cloud" << std::endl; 
       return;
     }
@@ -65,7 +64,6 @@ namespace tsm {
     if(_projector == 0 || _solver == 0) {
       throw std::runtime_error("Cannot track without a projector and a solver");
     }
-    //cerr << "setting up solver" << endl;
 
     Eigen::Isometry2f global_t_inverse = _global_t.inverse();
     _solver->setReference(_reference);
@@ -73,9 +71,6 @@ namespace tsm {
     _solver->setT(Eigen::Isometry2f::Identity());
     _correspondence_finder.init();
     _solver->setReferencePointsHint(_correspondence_finder.indicesReference());
-    // cerr << "starting iterations " 
-    // 	 << " reference_size:" << _reference->size()
-    // 	 << " current_size:" << _current->size() << endl;
 
     for (int i = 0; i < _iterations; ++i) {
       _correspondence_finder.compute();
@@ -85,8 +80,6 @@ namespace tsm {
 		      _correspondence_finder.indicesReference()
 		      );
     }
-   
-    //cerr << "done with iterations" << endl;
 
     _current->transformInPlace(_solver->T());
     _projector->project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), *_reference);
@@ -114,57 +107,61 @@ namespace tsm {
     float correspondences_ratio  = (float)num_correspondences/(float)_current->size();
     if (correspondences_ratio < _min_correspondences_ratio) {
       if(_current && _current != _reference) {
-	cerr << "too few correspondences, current: " << _current 
-	     << " size: " << _current->size()
-	     << " num_correspondences: " << num_correspondences 
-	     << " ratio: " << correspondences_ratio << endl;
-	//cerr << "deleting current (" << _current << ")" << endl;
+	std::cerr << "Too few correspondences:" << std::endl
+		  << "current: " << _current 
+		  << " size: " << _current->size()
+		  << " num_correspondences: " << num_correspondences 
+		  << " ratio: " << correspondences_ratio << std::endl;
+
 	delete _current;
-	//cerr << "done" << endl;
-	_current=0;
+	_current = 0;
       }
+
       return;
     }
 
     mean_dist /= num_correspondences;
-    float error = outliers/num_correspondences;
+    float current_bad_points_ratio = outliers / num_correspondences;
 
-    if (error <= _bpr) {
-      //cerr << "merging... ";
+    if (current_bad_points_ratio <= _bpr) {
       _cloud_processor.merge(reference_ranges, reference_indices, *_reference,
 			    current_ranges, current_indices, *_current,
 			    1.f, 0.5f);
 
       _global_t = _global_t * _solver->T();
-      _reference->clip(10.f, Eigen::Isometry2f::Identity());
       //_reference->voxelize(*_reference, 2);
       _reference->transformInPlace(_solver->T().inverse());
 
-      //cerr << "done" << endl;
 
       if (_current && _reference != _current) {
-	//cerr << "track good!" << endl;
-	////cerr << "deleting current (" << _current << ")" << endl;
 	delete _current;
 	_current = 0;
-	//cerr << "done" << endl;
       }
     } else {
-      cerr << "track bad" << endl;
-      cerr << "track broken" << endl;
+      _last_clipped_pose = _global_t;
+
+      std::cerr << "Track bad" << std::endl;
+      std::cerr << "Track broken" << std::endl;
+
       if (_reference  && _reference != _current) {
-	//cerr << "deleting reference (" << _reference << ")" << endl;
 	_reference = 0;
-	//cerr << "done" << endl;
       }
+
       _reference = _current;
       std::cerr << std::endl << "Track broken" << std::endl;
       std::cerr << "Mean dist: " << mean_dist << std::endl;
       std::cerr << "Outliers: " << outliers << std::endl;
       std::cerr << "Inliers: " << inliers << std::endl;
-      std::cerr << "Outliers percentage: " << error << std::endl;
-      std::cerr << "Inliers percentage: " << 1 - error << std::endl;
+      std::cerr << "Outliers percentage: " << current_bad_points_ratio << std::endl;
+      std::cerr << "Inliers percentage: " << 1 - current_bad_points_ratio << std::endl;
     }
+    Eigen::Isometry2f delta_clip = _last_clipped_pose.inverse() * _global_t;
+    if (delta_clip.translation().norm() > _clip_translation_threshold) {
+      _reference->clip(_local_map_clipping_range);
+      _last_clipped_pose=_global_t;		
+      std::cerr << "Clipping" << std::endl;
+    }
+      
 
     double finish = getTime() - init;
     std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;

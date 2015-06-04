@@ -28,7 +28,7 @@ class MessageHandler {
   inline int frameSkip() const { return _frame_skip; }
   inline int laserFrameCount() const { return _frame_count; }
   inline std::list<CloudWithTime*>& clouds()  { return _clouds; }
-  inline tsm::Projector2D* projector() { return _projector; }
+  inline const tsm::Projector2D* projector() const { return _projector; }
  private:
   tsm::Projector2D* _projector;
   std::list<CloudWithTime*> _clouds;
