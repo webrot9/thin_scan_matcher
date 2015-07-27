@@ -86,7 +86,7 @@ namespace tsm {
 
 	float range = sqrt(real_pt.x() * real_pt.x() + real_pt.z() * real_pt.z());
 
-	if (real_pt.z() != real_pt.z() || real_pt.z() < _min_range || real_pt.z() > _max_range)
+	if (real_pt.z() != real_pt.z() || real_pt.z() <= _min_range || real_pt.z() >= _max_range)
 	  continue;
 
 	ranges[c] = range;
@@ -137,7 +137,7 @@ namespace tsm {
     for (size_t i = 0; i < ranges.size(); ++i){
       float r = ranges[i];
 
-      if (r != r || r < _min_range || r > _max_range)
+      if (r != r || r <= _min_range || r >= _max_range)
 	continue;
 
       model[k]._point = _sct->sincos(i) * r;
