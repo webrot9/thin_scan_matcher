@@ -16,7 +16,7 @@ namespace tsm {
   public:
     Tracker();
     virtual ~Tracker();
-    void update(Cloud2D* cloud=0);
+    void update(Cloud2D* cloud=0, const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
     inline void reset();
 
     // setter & getter

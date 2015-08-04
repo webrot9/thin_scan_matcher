@@ -1,6 +1,11 @@
+#include <cstdio>
+#include <fstream>
+
 #include "tracker.h"
 
 namespace tsm {
+  using namespace std;
+
   inline double tv2sec(struct timeval& tv) {
     return (double) tv.tv_sec + 1e-6 * (double) tv.tv_usec;
   }
@@ -27,7 +32,7 @@ namespace tsm {
     _correspondence_finder = 0;
     _inlier_distance = 0.1;
     _min_correspondences_ratio = 0.5;
-    _local_map_clipping_range = 10;
+    _local_map_clipping_range = 5;
     _clip_translation_threshold = 5;
   }
 
@@ -42,7 +47,7 @@ namespace tsm {
   }
 
 
-  void Tracker::update(Cloud2D* cloud_) {
+  void Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
     if (cloud_)
       setCurrent(cloud_);
     double init = getTime();
@@ -65,10 +70,9 @@ namespace tsm {
       throw std::runtime_error("Cannot track without a projector and a solver");
     }
 
-    Eigen::Isometry2f global_t_inverse = _global_t.inverse();
     _solver->setReference(_reference);
     _solver->setCurrent(_current);
-    _solver->setT(Eigen::Isometry2f::Identity());
+    _solver->setT(initial_guess);
     _correspondence_finder.init();
     _solver->setReferencePointsHint(_correspondence_finder.indicesReference());
 
@@ -104,6 +108,7 @@ namespace tsm {
 	  ++outliers;
       }
     }
+
     float correspondences_ratio  = (float)num_correspondences/(float)_current->size();
     if (correspondences_ratio < _min_correspondences_ratio) {
       if(_current && _current != _reference) {
@@ -131,7 +136,6 @@ namespace tsm {
       _global_t = _global_t * _solver->T();
       //_reference->voxelize(*_reference, 2);
       _reference->transformInPlace(_solver->T().inverse());
-
 
       if (_current && _reference != _current) {
 	delete _current;
