@@ -46,8 +46,20 @@ namespace tsm {
     _correspondence_finder.setProjector(_projector);
   }
 
+  void Tracker::dump() {
+    static int filenum=0;
+    char filename[1024];
+    sprintf(filename, "dump-%05d.txt", filenum);
+    filenum++;
+    ofstream os(filename);
+    Cloud2D cloud = *_reference;
+    cloud.transformInPlace(_global_t);
+    for (size_t i=0; i<cloud.size(); i++){
+      os << cloud.at(i).point().transpose() << endl;
+    }
+  }
 
-  void Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
+  bool Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
     if (cloud_)
       setCurrent(cloud_);
     double init = getTime();
@@ -63,7 +75,7 @@ namespace tsm {
       _global_t.setIdentity();
       _last_clipped_pose = _global_t;
       std::cerr <<  "1st cloud" << std::endl; 
-      return;
+      return true;
     }
 
     if(_projector == 0 || _solver == 0) {
@@ -117,12 +129,13 @@ namespace tsm {
 		  << " size: " << _current->size()
 		  << " num_correspondences: " << num_correspondences 
 		  << " ratio: " << correspondences_ratio << std::endl;
+	dump();
 
 	delete _current;
 	_current = 0;
       }
 
-      return;
+      return false;
     }
 
     mean_dist /= num_correspondences;
@@ -141,6 +154,14 @@ namespace tsm {
 	delete _current;
 	_current = 0;
       }
+
+      Eigen::Isometry2f delta_clip = _last_clipped_pose.inverse() * _global_t;
+      if (delta_clip.translation().norm() > _clip_translation_threshold) {
+	dump();
+	_reference->clip(_local_map_clipping_range);
+	_last_clipped_pose = _global_t;		
+	std::cerr << "Clipping" << std::endl;
+      }
     } else {
       _last_clipped_pose = _global_t;
 
@@ -152,24 +173,122 @@ namespace tsm {
       }
 
       _reference = _current;
+      dump();
+
       std::cerr << std::endl << "Track broken" << std::endl;
       std::cerr << "Mean dist: " << mean_dist << std::endl;
       std::cerr << "Outliers: " << outliers << std::endl;
       std::cerr << "Inliers: " << inliers << std::endl;
       std::cerr << "Outliers percentage: " << current_bad_points_ratio << std::endl;
       std::cerr << "Inliers percentage: " << 1 - current_bad_points_ratio << std::endl;
+
+      return false;
     }
-    Eigen::Isometry2f delta_clip = _last_clipped_pose.inverse() * _global_t;
-    if (delta_clip.translation().norm() > _clip_translation_threshold) {
-      _reference->clip(_local_map_clipping_range);
-      _last_clipped_pose=_global_t;		
-      std::cerr << "Clipping" << std::endl;
-    }
-      
 
     double finish = getTime() - init;
     std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;
     std::cerr.flush();
+
+    return true;
+  }
+
+  bool Tracker::match(const Eigen::Isometry2f& initial_guess) {
+    if (! _reference || !_current)
+      return false;
+
+    double init = getTime();
+    float num_correspondences = 0;
+    float outliers = 0;
+    float inliers = 0;
+    float mean_dist = 0;
+    FloatVector current_ranges, current_in_ref_ranges, reference_ranges;
+    IntVector current_indices, current_in_ref_indices, reference_indices;
+
+    _solver->setReference(_reference);
+    _solver->setCurrent(_current);
+    _solver->setT(initial_guess);
+    _correspondence_finder.init();
+    _solver->setReferencePointsHint(_correspondence_finder.indicesReference());
+
+    RGBImage img1;
+    correspondenceFinder()->drawCorrespondences(img1, _solver->T(), 20);
+    cv::imshow( "Correspondences Before", img1);
+    cv::waitKey(0);
+
+    for (int i = 0; i < _iterations; ++i) {
+      _correspondence_finder.compute();
+      _solver->optimize(
+		      _correspondence_finder.correspondences(),
+		      _correspondence_finder.indicesCurrent(),
+		      _correspondence_finder.indicesReference()
+		      );
+    }
+
+    RGBImage img;
+    correspondenceFinder()->drawCorrespondences(img, _solver->T(), 20);
+    cv::imshow( "Correspondences After", img);
+    cv::waitKey(0);
+    
+    std::cerr << "Solver T after: \n" << _solver->T().matrix() << std::endl;
+    _current->transformInPlace(_solver->T());
+    _projector->project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), *_reference);
+    _projector->project(current_ranges, current_indices, Eigen::Isometry2f::Identity(), *_current);
+
+    int size = std::min(reference_indices.size(), current_indices.size());
+
+    for (int c = 0; c < size; ++c) {
+      int& ref_idx = reference_indices[c];
+      int& curr_idx = current_indices[c];
+      float diff = 0;
+
+      if (ref_idx >= 0 && curr_idx >= 0){
+	++num_correspondences;
+	diff = std::fabs(current_ranges[c] - reference_ranges[c]);
+
+	mean_dist += diff;
+
+	if (diff < _inlier_distance)
+	  ++inliers;
+	else
+	  ++outliers;
+      }
+    }
+
+    float correspondences_ratio  = (float)num_correspondences/(float)_current->size();
+    if (correspondences_ratio < _min_correspondences_ratio) {
+      if(_current && _current != _reference) {
+	std::cerr << "Too few correspondences:" << std::endl
+		  << "current: " << _current 
+		  << " size: " << _current->size()
+		  << " num_correspondences: " << num_correspondences 
+		  << " ratio: " << correspondences_ratio << std::endl;
+	dump();
+    	
+	delete _current;
+	_current = 0;
+      }
+
+      return false;
+    }
+
+    mean_dist /= num_correspondences;
+    float current_bad_points_ratio = outliers / num_correspondences;
+
+    if (current_bad_points_ratio > _bpr) {
+      dump();
+      std::cerr << std::endl << "Track broken" << std::endl;
+      std::cerr << "Mean dist: " << mean_dist << std::endl;
+      std::cerr << "Outliers: " << outliers << std::endl;
+      std::cerr << "Inliers: " << inliers << std::endl;
+      std::cerr << "Outliers percentage: " << current_bad_points_ratio << std::endl;
+      std::cerr << "Inliers percentage: " << 1 - current_bad_points_ratio << std::endl;
+      return false;
+    } 
+
+    double finish = getTime() - init;
+    std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;
+    std::cerr.flush();
+    return true;
   }
 
   void Tracker::reset() {

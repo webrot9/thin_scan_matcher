@@ -16,8 +16,10 @@ namespace tsm {
   public:
     Tracker();
     virtual ~Tracker();
-    void update(Cloud2D* cloud=0, const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
+    bool update(Cloud2D* cloud=0, const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
     inline void reset();
+
+    bool match(const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
 
     // setter & getter
     inline void setIterations(const int &iterations) { _iterations = iterations; }
@@ -44,6 +46,7 @@ namespace tsm {
     inline void setLocalMapClippingRange(float range) { _local_map_clipping_range = range; }
     inline void setClipTranslationThreshold(float t) { _clip_translation_threshold = t; }
 
+    void dump();
   private:
     int _iterations;
     float _bpr;
