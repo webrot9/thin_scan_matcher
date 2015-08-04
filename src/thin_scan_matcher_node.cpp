@@ -42,6 +42,7 @@ int main(int argc, char **argv) {
   bool publish_odom;
   bool publish_tf;
   double min_correspondences_ratio;
+  int iterations;
 
   double local_map_clipping_range;
   double local_map_clipping_translation_threshold;
@@ -70,6 +71,7 @@ int main(int argc, char **argv) {
   n.param("publish_odom", publish_odom, true);
   n.param("publish_tf", publish_tf, false);
   n.param("inlier_distance", inlier_distance, 0.1);
+  n.param("iterations", iterations, 10);
   n.param("frame_skip", frame_skip, 1);
   n.param("bpr", bpr, 0.2);
   n.param("min_correspondences_ratio", min_correspondences_ratio, 0.3);
@@ -103,12 +105,14 @@ int main(int argc, char **argv) {
   std::cout << "_min_matching_range:=" << min_matching_range << std::endl;
   std::cout << "_num_matching_beams:=" << num_matching_beams << std::endl;
   std::cout << "_matching_fov:=" << matching_fov << std::endl;
+  std::cout << "_iterations:=" <<  iterations << std::endl;
 
   fflush(stdout);
 
   // Setting input parameters
   message_handler.setFrameSkip(frame_skip);
   tracker.setBpr(bpr);
+  tracker.setIterations(iterations);
   tracker.setInlierDistance(inlier_distance);
   tracker.setMinCorrespondencesRatio(min_correspondences_ratio);
   tracker.setLocalMapClippingRange(local_map_clipping_range);

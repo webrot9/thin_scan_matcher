@@ -68,9 +68,9 @@ namespace tsm {
     void voxelize(Cloud2D& model, float res);  
 
     //! draws a cloud, by applying the provided transformation, with normals and origin pose
-    void draw(UnsignedCharImage& img, bool draw_normals = false,
+    void draw(RGBImage& img, cv::Vec3b color, bool draw_normals = false,
 	      Eigen::Isometry2f T = Eigen::Isometry2f::Identity(),
-	      bool draw_pose_origin = false) const;
+	      bool draw_pose_origin = false, float scale = 20) const;
 
     virtual ~Cloud2D();
   };

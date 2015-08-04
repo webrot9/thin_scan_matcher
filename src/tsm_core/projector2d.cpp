@@ -204,7 +204,6 @@ namespace tsm {
       if (p0.dot(n) > 0)
 	n = -n;
 
-      Eigen::Vector2f t(n.y(), -n.x());
       model[i]._normal = n;
     }
   }
