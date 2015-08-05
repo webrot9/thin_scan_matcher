@@ -6,9 +6,9 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include "message_filters/sync_policies/approximate_time.h"
+#include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/Imu.h>
 #include "std_msgs/String.h"
-#include "sensor_msgs/Image.h"
-#include "sensor_msgs/CameraInfo.h"
 #include "nav_msgs/Odometry.h"
 #include "tf/transform_broadcaster.h"
 
@@ -24,12 +24,96 @@
 #include "tsm_core/solver2d.h"
 #include "tsm_core/tracker.h"
 
-#include "message_handler.h"
+#include "qapplication.h"
+#include "tsm_core/tracker_viewer.h"
+
+using namespace std;
+
+
+struct CloudWithTime: public tsm::Cloud2D {
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  CloudWithTime(const ros::Time& t, const Eigen::Isometry2f& guess_=Eigen::Isometry2f::Identity()){
+    timestamp=t;
+   guess=guess_;
+  }
+  ros::Time timestamp;
+  Eigen::Isometry2f guess;
+};
+
+class MessageHandler {
+ public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+  MessageHandler();
+  ~MessageHandler();
+  void laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg);  
+  void imu_callback(const sensor_msgs::Imu::ConstPtr& msg);  
+
+  // setter & getter
+  inline void setFrameSkip(int frame_skip) { _frame_skip = frame_skip; }
+  inline int frameSkip() const { return _frame_skip; }
+  inline int laserFrameCount() const { return _frame_count; }
+  inline std::list<CloudWithTime*>& clouds()  { return _clouds; }
+  inline const tsm::Projector2D* projector() const { return _projector; }
+ private:
+  tsm::Projector2D* _projector;
+  std::list<CloudWithTime*> _clouds;
+  sensor_msgs::Imu _last_imu_msg;
+  int _frame_count;
+  int _frame_skip;
+};
+
+MessageHandler::MessageHandler() {
+  _projector = NULL;
+  _frame_count = 0;
+  _frame_skip = 1;
+  _last_imu_msg.header.stamp=ros::Time(0.0d);
+}
+
+MessageHandler::~MessageHandler() {
+  if (_projector)
+    delete _projector;
+}
+
+void MessageHandler::laser_callback(const sensor_msgs::LaserScan::ConstPtr& msg) {
+  ++_frame_count;
+
+  if (_frame_count % _frame_skip != 0)
+    return;
+
+  if (_projector == NULL) {
+    float fov = 0.f;
+    fov = msg->angle_increment * msg->ranges.size();
+    _projector = new tsm::Projector2D();
+    _projector->setMaxRange(msg->range_max);
+    _projector->setMinRange(msg->range_min);
+    _projector->setFov(fov);
+    _projector->setNumRanges(msg->ranges.size());
+  }
+
+  Eigen::Isometry2f guess;
+  guess.setIdentity();
+  if (_last_imu_msg.header.stamp.toSec()>0) {
+     guess.translation().setZero();
+     float angle=Eigen::AngleAxisf(Eigen::Quaternionf(_last_imu_msg.orientation.x,
+					 _last_imu_msg.orientation.y,
+					 _last_imu_msg.orientation.z,
+					 _last_imu_msg.orientation.w).toRotationMatrix()).angle();
+     guess.linear()=Eigen::Rotation2Df(angle).toRotationMatrix();
+  }
+CloudWithTime* current = new CloudWithTime(msg->header.stamp, guess);
+  _projector->unproject(*current, msg->ranges);
+  _clouds.push_back(current);
+}
+
+void MessageHandler::imu_callback(const sensor_msgs::Imu::ConstPtr& msg) {
+  _last_imu_msg= *msg;
+}
+
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "tsm_test_node");
 
   std::string laser_topic;
+  std::string imu_topic;
   std::string published_odom_topic;
   std::string published_tf_origin_frame_id;
   std::string published_tf_destination_frame_id;
@@ -57,11 +141,14 @@ int main(int argc, char **argv) {
   tsm::Projector2D* projector = 0;
   tsm::Tracker tracker;
   tracker.setSolver(&solver);
+  bool use_gui;
 
+  ros::init(argc, argv, "tsm_test_node");
   ros::NodeHandle n("~");
   
   // ROS parameters setting
   n.param("laser_topic", laser_topic, std::string("/scan"));
+  n.param("imu_topic", imu_topic, std::string(""));
   n.param("published_odom_topic", published_odom_topic, std::string("/odom_calib"));
   n.param("base_link_frame_id", base_link_frame_id, std::string("/base_link"));
   n.param("published_tf_origin_frame_id", published_tf_origin_frame_id, std::string("/tsm_frame"));
@@ -81,20 +168,22 @@ int main(int argc, char **argv) {
   n.param("min_matching_range", min_matching_range, 0.0);
   n.param("num_matching_beams", num_matching_beams, 0);
   n.param("matching_fov", matching_fov, 0.0);
+  n.param("use_gui", use_gui, false);
   
   if (frame_skip <= 0)
     frame_skip = 1;
 
   std::cout << "Launched with params:" << std::endl;
-  std::cout << "_laser_topic:=" << laser_topic.c_str() << std::endl;
-  std::cout << "_published_odom_topic:=" << published_odom_topic.c_str() << std::endl;
+  std::cout << "_laser_topic:=" << laser_topic << std::endl;
+  std::cout << "_imu_topic:=" << imu_topic << std::endl;
+  std::cout << "_published_odom_topic:=" << published_odom_topic << std::endl;
   std::cout << "_frame_skip:=" << frame_skip << std::endl;
   std::cout << "_bpr:=" << bpr << std::endl;
-  std::cout << "_base_link_frame_id:=" << base_link_frame_id.c_str() << std::endl;
-  std::cout << "_published_tf_origin_frame_id:=" << published_tf_origin_frame_id.c_str() << std::endl;
-  std::cout << "_published_tf_destination_frame_id:=" << published_tf_destination_frame_id.c_str() << std::endl;
-  std::cout << "_current_map_topic:=" << current_map_topic.c_str() << std::endl;
-  std::cout << "_reference_map_topic:=" << reference_map_topic.c_str() << std::endl;
+  std::cout << "_base_link_frame_id:=" << base_link_frame_id << std::endl;
+  std::cout << "_published_tf_origin_frame_id:=" << published_tf_origin_frame_id << std::endl;
+  std::cout << "_published_tf_destination_frame_id:=" << published_tf_destination_frame_id << std::endl;
+  std::cout << "_current_map_topic:=" << current_map_topic << std::endl;
+  std::cout << "_reference_map_topic:=" << reference_map_topic << std::endl;
   std::cout << "_publish_odom:=" << publish_odom << std::endl;
   std::cout << "_publish_tf:=" << publish_tf << std::endl;
   std::cout << "_inlier_distance:=" << inlier_distance << std::endl;
@@ -106,6 +195,8 @@ int main(int argc, char **argv) {
   std::cout << "_num_matching_beams:=" << num_matching_beams << std::endl;
   std::cout << "_matching_fov:=" << matching_fov << std::endl;
   std::cout << "_iterations:=" <<  iterations << std::endl;
+  std::cout << "_use_gui:=" <<  (use_gui?"true":"false") << std::endl;
+
 
   fflush(stdout);
 
@@ -121,13 +212,28 @@ int main(int argc, char **argv) {
   std::cerr << "inlier distance from tracker: "<< tracker.inlierDistance() << std::endl;
   // ROS topic subscriptions
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
+
+  ros::Subscriber imu_sub;
+  if (imu_topic!="")
+    imu_sub = n.subscribe(imu_topic, 100, &MessageHandler::imu_callback, &message_handler);
+
   ros::Publisher odom_pub = n.advertise<nav_msgs::Odometry>(published_odom_topic, 1);
 
   CloudWithTime *cloud = 0;
   Eigen::Isometry2f global_t;
 
   std::cerr << "Entering ROS loop" << std::endl;
-
+  
+  QApplication* app=0;
+  tsm::TrackerViewer* viewer=0;
+  if (use_gui) {
+    app=new QApplication(argc, argv);
+    viewer=new tsm::TrackerViewer(&tracker);
+    viewer->init();
+    viewer->show();
+  }
+  Eigen::Isometry2f previous_guess;
+  bool has_guess=false;
   while (ros::ok()) {
     std::list<CloudWithTime*>& clouds = message_handler.clouds();
 
@@ -163,8 +269,14 @@ int main(int argc, char **argv) {
       ros::Time timestamp = cloud->timestamp;
       clouds.pop_front();
 
-      
-      tracker.update(cloud);
+      if(has_guess) {
+	tracker.update(cloud, previous_guess.inverse()*cloud->guess);
+      } else {
+	tracker.update(cloud);
+	has_guess=true;
+      }
+      previous_guess=cloud->guess;
+
       global_t = tracker.globalT();
 
       Eigen::Matrix3f rot = Eigen::Matrix3f::Identity();
@@ -207,6 +319,11 @@ int main(int argc, char **argv) {
     }
 
     ros::spinOnce();
+    if (use_gui) {
+      viewer->updateGL();
+      app->processEvents();
+      usleep(20000);
+    }
     //usleep(10000);
   }
 

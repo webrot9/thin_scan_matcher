@@ -48,6 +48,12 @@ namespace tsm {
 
 
   void Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
+
+    if (_current && _reference && _reference != _current) {
+      delete _current;
+      _current = 0;
+    }
+
     if (cloud_)
       setCurrent(cloud_);
     double init = getTime();
@@ -79,10 +85,10 @@ namespace tsm {
     for (int i = 0; i < _iterations; ++i) {
       _correspondence_finder.compute();
       _solver->optimize(
-		      _correspondence_finder.correspondences(),
-		      _correspondence_finder.indicesCurrent(),
-		      _correspondence_finder.indicesReference()
-		      );
+			_correspondence_finder.correspondences(),
+			_correspondence_finder.indicesCurrent(),
+			_correspondence_finder.indicesReference()
+			);
     }
 
     _current->transformInPlace(_solver->T());
@@ -130,17 +136,12 @@ namespace tsm {
 
     if (current_bad_points_ratio <= _bpr) {
       _cloud_processor.merge(reference_ranges, reference_indices, *_reference,
-			    current_ranges, current_indices, *_current,
-			    1.f, 0.5f);
+			     current_ranges, current_indices, *_current,
+			     1.f, 0.5f);
 
       _global_t = _global_t * _solver->T();
       //_reference->voxelize(*_reference, 2);
       _reference->transformInPlace(_solver->T().inverse());
-
-      if (_current && _reference != _current) {
-	delete _current;
-	_current = 0;
-      }
     } else {
       _last_clipped_pose = _global_t;
 
