@@ -59,7 +59,13 @@ namespace tsm {
     }
   }
 
-  bool Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
+  void Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
+
+    if (_current && _reference && _reference != _current) {
+      delete _current;
+      _current = 0;
+    }
+
     if (cloud_)
       setCurrent(cloud_);
     double init = getTime();
@@ -91,10 +97,10 @@ namespace tsm {
     for (int i = 0; i < _iterations; ++i) {
       _correspondence_finder.compute();
       _solver->optimize(
-		      _correspondence_finder.correspondences(),
-		      _correspondence_finder.indicesCurrent(),
-		      _correspondence_finder.indicesReference()
-		      );
+			_correspondence_finder.correspondences(),
+			_correspondence_finder.indicesCurrent(),
+			_correspondence_finder.indicesReference()
+			);
     }
 
     _current->transformInPlace(_solver->T());
@@ -143,25 +149,12 @@ namespace tsm {
 
     if (current_bad_points_ratio <= _bpr) {
       _cloud_processor.merge(reference_ranges, reference_indices, *_reference,
-			    current_ranges, current_indices, *_current,
-			    1.f, 0.5f);
+			     current_ranges, current_indices, *_current,
+			     1.f, 0.5f);
 
       _global_t = _global_t * _solver->T();
       //_reference->voxelize(*_reference, 2);
       _reference->transformInPlace(_solver->T().inverse());
-
-      if (_current && _reference != _current) {
-	delete _current;
-	_current = 0;
-      }
-
-      Eigen::Isometry2f delta_clip = _last_clipped_pose.inverse() * _global_t;
-      if (delta_clip.translation().norm() > _clip_translation_threshold) {
-	dump();
-	_reference->clip(_local_map_clipping_range);
-	_last_clipped_pose = _global_t;		
-	std::cerr << "Clipping" << std::endl;
-      }
     } else {
       _last_clipped_pose = _global_t;
 
@@ -185,6 +178,14 @@ namespace tsm {
       return false;
     }
 
+    Eigen::Isometry2f delta_clip = _last_clipped_pose.inverse() * _global_t;
+    if (delta_clip.translation().norm() > _clip_translation_threshold) {
+      dump();
+      _reference->clip(_local_map_clipping_range);
+      _last_clipped_pose = _global_t;		
+      std::cerr << "Clipping" << std::endl;
+    }
+    
     double finish = getTime() - init;
     std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;
     std::cerr.flush();

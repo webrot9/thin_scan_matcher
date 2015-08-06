@@ -14,8 +14,8 @@ namespace tsm {
     inline const std::vector<int>& correspondences() const { return _correspondences; }
     inline const IntVector& indicesCurrent() const { return _indices_current; }
     inline const IntVector& indicesReference() const { return _indices_reference; }
-    void drawCorrespondences(RGBImage& img, Eigen::Isometry2f T, float scale=20) const;
-
+    //void drawCorrespondences(RGBImage& img, Eigen::Isometry2f T, float scale=20) const;
+    void drawCorrespondences(Eigen::Isometry2f T) const;
     // setter & getter
     inline void setProjector(const Projector2D* projector) { 
       _projector = projector;
