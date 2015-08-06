@@ -59,7 +59,7 @@ namespace tsm {
     }
   }
 
-  void Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
+  bool Tracker::update(Cloud2D* cloud_, const Eigen::Isometry2f& initial_guess) {
 
     if (_current && _reference && _reference != _current) {
       delete _current;
@@ -75,6 +75,8 @@ namespace tsm {
     float mean_dist = 0;
     FloatVector current_ranges, current_in_ref_ranges, reference_ranges;
     IntVector current_indices, current_in_ref_indices, reference_indices;
+
+    _inliers_ratio = 0.0;
 
     if (! _reference) {
       _reference = _current;
@@ -146,6 +148,7 @@ namespace tsm {
 
     mean_dist /= num_correspondences;
     float current_bad_points_ratio = outliers / num_correspondences;
+    _inliers_ratio = 1 - current_bad_points_ratio;
 
     if (current_bad_points_ratio <= _bpr) {
       _cloud_processor.merge(reference_ranges, reference_indices, *_reference,
@@ -205,16 +208,19 @@ namespace tsm {
     FloatVector current_ranges, current_in_ref_ranges, reference_ranges;
     IntVector current_indices, current_in_ref_indices, reference_indices;
 
+    _correspondences_ratio = 0.0;
+    _inliers_ratio = 0.0;
+   
     _solver->setReference(_reference);
     _solver->setCurrent(_current);
     _solver->setT(initial_guess);
     _correspondence_finder.init();
     _solver->setReferencePointsHint(_correspondence_finder.indicesReference());
 
-    RGBImage img1;
-    correspondenceFinder()->drawCorrespondences(img1, _solver->T(), 20);
-    cv::imshow( "Correspondences Before", img1);
-    cv::waitKey(0);
+    // RGBImage img1;
+    // correspondenceFinder()->drawCorrespondences(img1, _solver->T(), 20);
+    // cv::imshow( "Correspondences Before", img1);
+    // cv::waitKey(0);
 
     for (int i = 0; i < _iterations; ++i) {
       _correspondence_finder.compute();
@@ -225,15 +231,15 @@ namespace tsm {
 		      );
     }
 
-    RGBImage img;
-    correspondenceFinder()->drawCorrespondences(img, _solver->T(), 20);
-    cv::imshow( "Correspondences After", img);
-    cv::waitKey(0);
+    // RGBImage img;
+    // correspondenceFinder()->drawCorrespondences(img, _solver->T(), 20);
+    // cv::imshow( "Correspondences After", img);
+    // cv::waitKey(0);
     
-    std::cerr << "Solver T after: \n" << _solver->T().matrix() << std::endl;
-    _current->transformInPlace(_solver->T());
+    //_current->transformInPlace(_solver->T());
     _projector->project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), *_reference);
-    _projector->project(current_ranges, current_indices, Eigen::Isometry2f::Identity(), *_current);
+    //_projector->project(current_ranges, current_indices, Eigen::Isometry2f::Identity(), *_current);
+    _projector->project(current_ranges, current_indices, _solver->T(), *_current);
 
     int size = std::min(reference_indices.size(), current_indices.size());
 
@@ -254,19 +260,15 @@ namespace tsm {
 	  ++outliers;
       }
     }
-
-    float correspondences_ratio  = (float)num_correspondences/(float)_current->size();
-    if (correspondences_ratio < _min_correspondences_ratio) {
+    _correspondences_ratio  = (float)num_correspondences/(float)_current->size();
+    if (_correspondences_ratio < _min_correspondences_ratio) {
       if(_current && _current != _reference) {
 	std::cerr << "Too few correspondences:" << std::endl
 		  << "current: " << _current 
 		  << " size: " << _current->size()
 		  << " num_correspondences: " << num_correspondences 
-		  << " ratio: " << correspondences_ratio << std::endl;
+		  << " ratio: " << _correspondences_ratio << std::endl;
 	dump();
-    	
-	delete _current;
-	_current = 0;
       }
 
       return false;
@@ -274,17 +276,22 @@ namespace tsm {
 
     mean_dist /= num_correspondences;
     float current_bad_points_ratio = outliers / num_correspondences;
+    _inliers_ratio = 1 - current_bad_points_ratio;
 
     if (current_bad_points_ratio > _bpr) {
       dump();
-      std::cerr << std::endl << "Track broken" << std::endl;
-      std::cerr << "Mean dist: " << mean_dist << std::endl;
-      std::cerr << "Outliers: " << outliers << std::endl;
-      std::cerr << "Inliers: " << inliers << std::endl;
-      std::cerr << "Outliers percentage: " << current_bad_points_ratio << std::endl;
+      std::cerr << "Match failed" << std::endl;
+      //std::cerr << "Mean dist: " << mean_dist << std::endl;
+      //std::cerr << "Outliers: " << outliers << std::endl;
+      //std::cerr << "Inliers: " << inliers << std::endl;
+      //std::cerr << "Outliers percentage: " << current_bad_points_ratio << std::endl;
       std::cerr << "Inliers percentage: " << 1 - current_bad_points_ratio << std::endl;
       return false;
     } 
+
+    std::cerr << "Succeed: num_correspondences: " << num_correspondences 
+	      << " ratio: " << _correspondences_ratio 
+	      << ". Inliers percentage: " << _inliers_ratio << std::endl;
 
     double finish = getTime() - init;
     std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;

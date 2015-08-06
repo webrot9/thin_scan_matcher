@@ -46,6 +46,9 @@ namespace tsm {
     inline void setLocalMapClippingRange(float range) { _local_map_clipping_range = range; }
     inline void setClipTranslationThreshold(float t) { _clip_translation_threshold = t; }
 
+    inline float inliersRatio() {return _inliers_ratio;}
+    inline float correspondencesRatio() {return _correspondences_ratio;}
+
     void dump();
   private:
     int _iterations;
@@ -57,6 +60,8 @@ namespace tsm {
     Eigen::Isometry2f _last_clipped_pose;
     float _clip_translation_threshold;
     float _local_map_clipping_range;
+
+    float _inliers_ratio, _correspondences_ratio;
 
     Cloud2D *_reference, *_current;
     Solver2D *_solver;

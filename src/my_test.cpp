@@ -14,6 +14,9 @@
 #include "tsm_core/solver2d.h"
 #include "tsm_core/tracker.h"
 
+#include "qapplication.h"
+#include "tsm_core/tracker_viewer.h"
+
 // g2o
 #include "g2o/core/optimizable_graph.h"
 #include "g2o/core/sparse_optimizer.h"
@@ -144,7 +147,7 @@ protected:
 
 class IDoMyStuffTrigger: public SensorMessageSorter::Trigger {
 public:
-  IDoMyStuffTrigger(SensorMessageSorter* sorter, tsm::Tracker& tracker) : SensorMessageSorter::Trigger(sorter, 0){
+  IDoMyStuffTrigger(SensorMessageSorter* sorter, tsm::Tracker* tracker) : SensorMessageSorter::Trigger(sorter, 0){
     _projector = 0;
     _tracker = tracker;
     firstUse = true;
@@ -167,12 +170,12 @@ public:
 	_projector->setNumRanges(las->ranges().size());
 	_projector->setFov(las->maxAngle()-las->minAngle());
 
-	_tracker.setProjector(_projector);
+	_tracker->setProjector(_projector);
 
 	tsm::Cloud2D* cloud = new tsm::Cloud2D();
 	_projector->unproject(*cloud, las->ranges());
-	_tracker.update(cloud);
-	global_t = _tracker.globalT();	
+	_tracker->update(cloud);
+	global_t = _tracker->globalT();	
 	std::cerr << "FIRST USE tracker result: " << global_t.matrix() << std::endl;
 
 	_gmap.addVertex(las);
@@ -202,9 +205,9 @@ public:
 	  rotation.fromRotationMatrix(prevTransf.linear());
 	  std::cerr << "Previous Transf: " << prevTransf.translation().x() << " " << prevTransf.translation().y() << " " << rotation.angle() << std::endl;
 
-	  bool success = _tracker.update(cloud, initial_guess);
+	  bool success = _tracker->update(cloud, initial_guess);
 	  if (success){
-	    global_t = _tracker.globalT();
+	    global_t = _tracker->globalT();
 	    
 	    rotation.fromRotationMatrix(global_t.linear());
 	    std::cerr << "Result: " << global_t.translation().x() << " " << global_t.translation().y() << " " << rotation.angle() << std::endl;
@@ -231,7 +234,7 @@ public:
 
 protected:
   tsm::Projector2D* _projector;
-  tsm::Tracker _tracker;
+  tsm::Tracker* _tracker;
   SimpleGraphMap _gmap;
   bool firstUse;
   Eigen::Isometry2f prevTransf; 
@@ -270,9 +273,19 @@ int main(int argc, char **argv){
   tsm::Solver2D solver;
   tracker.setSolver(&solver);
 
+  bool use_gui = true;
+  QApplication* app=0;
+  tsm::TrackerViewer* viewer=0;
+  if (use_gui) {
+    app=new QApplication(argc, argv);
+    viewer=new tsm::TrackerViewer(&tracker);
+    viewer->init();
+    viewer->show();
+  }
+
   SensorMessageSorter* sorter = new SensorMessageSorter;
   sorter->setWriteBackEnabled(false);
-  IDoMyStuffTrigger* idmst = new IDoMyStuffTrigger(sorter, tracker);
+  IDoMyStuffTrigger* idmst = new IDoMyStuffTrigger(sorter, &tracker);
   BaseMessage* msg=0;
 
   int max_count = atoi(argv[2]);
@@ -280,6 +293,12 @@ int main(int argc, char **argv){
   while ((count < max_count) && (msg = reader.readMessage()) ) {
     txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
     sorter->insertMessage(sensor_msg);
+
+    if (use_gui) {
+      viewer->updateGL();
+      app->processEvents();
+      usleep(10000);
+    }
 
     //for testing
     LaserMessage* las = dynamic_cast<LaserMessage*>(sensor_msg);

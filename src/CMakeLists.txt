@@ -53,6 +53,9 @@ target_link_libraries(my_test2
 add_executable(my_test3
   my_test3.cpp 
   graph_slam/vertices_finder.cpp
+  graph_slam/closure_buffer.cpp
+  graph_slam/closure_checker.cpp
+  graph_slam/graph_manipulator.cpp
 )
 
 target_link_libraries(my_test3

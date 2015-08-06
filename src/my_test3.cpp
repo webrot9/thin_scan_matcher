@@ -28,6 +28,9 @@
 
 //graph_slam
 #include "graph_slam/vertices_finder.h"
+#include "graph_slam/closure_buffer.h"
+#include "graph_slam/closure_checker.h"
+#include "graph_slam/graph_manipulator.h"
 
 #include <Eigen/Geometry> 
 
@@ -45,6 +48,24 @@ const char* banner[]={
   "",
   "usage: my_test <dump_file> max_nodes",
   0
+};
+
+struct MatcherResult {
+  MatcherResult(const Eigen::Isometry2f& transformation, const double& score, 
+		const Eigen::Matrix3f& informationMatrix = Eigen::Matrix3f::Identity()){
+    this->transformation = transformation;
+    this->score = score;
+    this->informationMatrix = informationMatrix;
+  }
+  Eigen::Isometry2f transformation;
+  double score;
+  Eigen::Matrix3f informationMatrix;
+};
+
+struct MatcherResultScoreComparator {
+  bool operator() (const MatcherResult& mr1, const MatcherResult& mr2){
+    return mr1.score>mr2.score;
+  } 
 };
 
 tsm::Cloud2D* cloudFromVertex(tsm::Projector2D* projector, OptimizableGraph::Vertex* vertex){
@@ -77,12 +98,6 @@ tsm::Cloud2D* cloudFromVSet(tsm::Projector2D* projector, OptimizableGraph::Verte
       finalCloud->add(*vcloud);
     }
   }
-
-  // tsm::RGBImage img;
-  // finalCloud->draw(img, cv::Vec3b(0,255,0), false, Eigen::Isometry2f::Identity(), false, 30);
-  // cv::imshow( "Merged Cloud", img );
-  // cv::waitKey(0); 
-  
   return finalCloud;
 }
 
@@ -148,9 +163,8 @@ public:
     _currentVertex = v;
   };
 
-  void addEdge(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
+  EdgeSE2* createEdgeSE2(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
     SE2 displacement(rel_transf.cast<double>());
-    std::cerr << "Adding Edge between : " << v1->id() << " and " << v2->id() << ". Displacement: " << displacement.translation().x() << " " << displacement.translation().y() << " " << displacement.rotation().angle() << std::endl;
 
     EdgeSE2 *e = new EdgeSE2;
     e->vertices()[0] = v1;
@@ -159,16 +173,62 @@ public:
   
     Matrix3d inf =  100 * Matrix3d::Identity();
     inf(2,2) = 1000;
-    
     e->setInformation(inf);
+
+    return e;
+  };
+
+  void addEdge(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
+    EdgeSE2 *e = createEdgeSE2(v1,v2,rel_transf);
+
+    std::cerr << "Adding Edge between : " << v1->id() << " and " << v2->id() << ". Displacement: " << e->measurement().translation().x() << " " << e->measurement().translation().y() << " " << e->measurement().rotation().angle() << std::endl;
     _graph->addEdge(e);
   };
-  
+
   void optimize(int nrunnings){
     _graph->initializeOptimization();
     _graph->optimize(nrunnings);
   };
 
+  void checkCovariance(OptimizableGraph::VertexSet& vset){
+    ///////////////////////////////////
+    // we need now to compute the marginal covariances of all other vertices w.r.t the newly inserted one
+
+    CovarianceEstimator ce(_graph);
+    ce.setVertices(vset);
+    ce.setGauge(currentVertex());
+    ce.compute();
+
+    OptimizableGraph::VertexSet tmpvset = vset;
+    for (OptimizableGraph::VertexSet::iterator it = tmpvset.begin(); it != tmpvset.end(); it++){
+      VertexSE2 *vertex = (VertexSE2*) *it;
+    
+      MatrixXd Pv = ce.getCovariance(vertex);
+      Matrix2d Pxy; Pxy << Pv(0,0), Pv(0,1), Pv(1,0), Pv(1,1);
+      SE2 delta = vertex->estimate().inverse() * currentVertex()->estimate();	
+      Vector2d hxy (delta.translation().x(), delta.translation().y());
+      double perceptionRange =1;
+      if (hxy.x()-perceptionRange>0) 
+	hxy.x() -= perceptionRange;
+      else if (hxy.x()+perceptionRange<0)
+	hxy.x() += perceptionRange;
+      else
+	hxy.x() = 0;
+
+      if (hxy.y()-perceptionRange>0) 
+	hxy.y() -= perceptionRange;
+      else if (hxy.y()+perceptionRange<0)
+	hxy.y() += perceptionRange;
+      else
+	hxy.y() = 0;
+    
+      double d2 = hxy.transpose() * Pxy.inverse() * hxy;
+      if (d2 > 5.99)
+	vset.erase(*it);
+ 
+    }
+  }
+  
   void findConstraints(){
     cerr << "\nFinding constraints"  << endl;
     VerticesFinder vf(_graph);
@@ -176,6 +236,8 @@ public:
     OptimizableGraph::VertexSet vset;
     vf.findVerticesScanMatching(currentVertex(), vset);
     
+    checkCovariance(vset);
+
     std::set<OptimizableGraph::VertexSet> setOfVSet;
     vf.findSetsOfVertices(vset, setOfVSet);
 
@@ -211,38 +273,109 @@ public:
 	tsm::Projector2D p;
 	p.setFov(2*M_PI);
 	tracker.setProjector(&p);
+	//tracker.setProjector(_projector);
 
 	tsm::Cloud2D* cvset = cloudFromVSet(_projector, myvset, closestV);
 	tsm::Cloud2D* cvertex = cloudFromVertex(_projector, currentVertex());
 
 	tracker.setReference(cvset);
+	tracker.setCurrent(cvertex);
 
 	VertexSE2* refv = (VertexSE2*) closestV;
 	VertexSE2* curv = (VertexSE2*) currentVertex();
-	SE2 initguessSE2 = refv->estimate().inverse()*curv->estimate();
-	Eigen::Isometry2d initguess2d = initguessSE2.toIsometry();
 	
-	std::cerr << "ReferenceVertex: " << refv->estimate().translation().x() << " " << refv->estimate().translation().y() << " " << refv->estimate().rotation().angle() << std::endl;
-	std::cerr << "CurrentVertex: " << curv->estimate().translation().x() << " " << curv->estimate().translation().y() << " " << curv->estimate().rotation().angle() << std::endl;
+	std::vector<MatcherResult> mresvec;
 
-	Eigen::Rotation2Dd rotation(0); 
-	rotation.fromRotationMatrix(initguess2d.linear());
-	std::cerr << "Initial guess: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
-	tracker.setCurrent(cvertex);
+	for (OptimizableGraph::VertexSet::iterator itv = myvset.begin(); itv != myvset.end(); itv++){
+	  VertexSE2* v = (VertexSE2*) (*itv);
 
+	  SE2 initguessSE2 = refv->estimate().inverse()*v->estimate();
+	  Eigen::Isometry2d initguess2d = initguessSE2.toIsometry();
+	  
+	  Eigen::Rotation2Dd rotation(0); 
+	  rotation.fromRotationMatrix(initguess2d.linear());
+	  std::cerr << endl << "Initial guess: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
+
+	  bool success = tracker.match(initguess2d.cast<float>());
+	  if (success){
+	    rotation.fromRotationMatrix(tracker.solver()->T().linear());
+	    std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
+	    cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
+	    MatcherResult mr(tracker.solver()->T(), tracker.correspondencesRatio()*tracker.inliersRatio());
+	    mresvec.push_back(mr);
+	  }
+
+	  Eigen::Rotation2Dd rotationPI(M_PI); 
+	  initguess2d.linear() = initguess2d.linear()*rotationPI;
+	  rotation.fromRotationMatrix(initguess2d.linear());
+	  std::cerr << endl << "Initial guess M_PI: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
+
+	  success = tracker.match(initguess2d.cast<float>());
+	  if (success){
+	    rotation.fromRotationMatrix(tracker.solver()->T().linear());
+	    std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
+	    cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
+	    MatcherResult mr(tracker.solver()->T(), tracker.correspondencesRatio()*tracker.inliersRatio());
+	    mresvec.push_back(mr);
+	  }
+	}
+
+	if (mresvec.size()){
+	  MatcherResultScoreComparator comp;
+	  std::sort(mresvec.begin(), mresvec.end(), comp);
+	  
+	  //Introducing results in closure checker
+	  //for (std::vector<MatcherResult>::iterator itmr = mresvec.begin(); itmr != mresvec.end(); itmr++){
+	  //  Eigen::Isometry2f res = (*itmr).transformation;
+	  Eigen::Isometry2f bestResult = mresvec[0].transformation;
+	  cerr << "BEST SCORE:" << mresvec[0].score << endl;
+	  cerr << "Loop closure between " << refv->id() << " and " << curv->id() << " accepted." << endl;
+	    
+	  EdgeSE2 *ne = createEdgeSE2(refv, curv, bestResult);
+	  loopClosingEdges.insert(ne);
+	  //}
+	}else
+	  cerr << "Loop closure between " << refv->id() << " and " << curv->id() << " rejected." << endl;
 	
-	bool success = tracker.match(initguess2d.cast<float>());
-
-	if (success)
-	  addEdge(refv, curv, tracker.solver()->T());
-	else
-	  cerr << "Loop closure rejected." << endl;
-
-	// loopClosingEdges.insert(ne);
-
       }
     }
+    if (loopClosingEdges.size()){
+      _closures.addEdgeSet(loopClosingEdges);
+      _closures.addVertex(currentVertex());
+    }
+    checkClosures();
   }
+
+  void checkClosures(){
+    int windowLoopClosure = 10;
+    float inlierThreshold = 3.0;
+    int minInliers = 6;
+    
+    LoopClosureChecker lcc;
+    if (_closures.checkList(windowLoopClosure)){
+      cout << endl << "Loop Closure Checking." << endl;
+      lcc.init(_closures.vertices(), _closures.edgeSet(), inlierThreshold);
+      lcc.check();
+      
+      cout << "Best Chi2 = " << lcc.chi2() << endl;
+      cout << "Inliers = " << lcc.inliers() << endl;
+      
+      if (lcc.inliers() >= minInliers){
+	LoopClosureChecker::EdgeDoubleMap results = lcc.closures();
+	cout << "Results:" << endl;
+	for (LoopClosureChecker::EdgeDoubleMap::iterator it= results.begin(); it!= results.end(); it++){
+	  EdgeSE2* e = (EdgeSE2*) (it->first);
+	  cout << "Edge from: " << e->vertices()[0]->id() << " to: " << e->vertices()[1]->id() << ". Chi2 = " << it->second <<  endl;
+
+	  if (it->second < inlierThreshold){
+	    cout << "Is an inlier. Adding to Graph" << endl;
+	    _graph->addEdge(e);
+	  }
+	}
+      }
+    }
+    _closures.updateList(windowLoopClosure);
+  };
 
   bool saveGraph(const char *filename){
     return _graph->save(filename);
@@ -258,6 +391,8 @@ protected:
   int _currentId;
   VertexSE2 *_currentVertex, *_previousVertex;
   tsm::Projector2D* _projector;
+  ClosureBuffer _closures;
+
 };
 
 class IDoMyStuffTrigger: public SensorMessageSorter::Trigger {
@@ -305,7 +440,6 @@ public:
 	rotation.fromRotationMatrix(displacement.linear().block<2,2>(0,0));
 	if ((sqrt(displacement.translation().x()*displacement.translation().x() + displacement.translation().y()*displacement.translation().y()) > .3) || rotation.angle() > M_PI_4){
 	  Eigen::Isometry3f odom = las->odometry(); 
-	  std::cerr << "ODOM: \n" << odom.matrix() << std::endl;
 	  
 	  tsm::Cloud2D* cloud = new tsm::Cloud2D();
 	  _projector->unproject(*cloud, las->ranges());
@@ -318,8 +452,6 @@ public:
 	  Eigen::Rotation2Dd rotation(0); 
 	  rotation.fromRotationMatrix(initial_guess.linear());
 	  std::cerr << "Initial guess: " << initial_guess.translation().x() << " " << initial_guess.translation().y() << " " << rotation.angle() << std::endl;
-	  rotation.fromRotationMatrix(prevTransf.linear());
-	  std::cerr << "Previous Transf: " << prevTransf.translation().x() << " " << prevTransf.translation().y() << " " << rotation.angle() << std::endl;
 
 	  bool success = _tracker.update(cloud, initial_guess);
 	  if (success){
@@ -337,6 +469,7 @@ public:
 	    //Trust the odometry
 	    _gmap.addVertex(las);
 	    _gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), initial_guess);
+	    _gmap.optimize(1);
 	  }
 	  	  
 	  prevOdom = las->odometry();
@@ -357,7 +490,6 @@ protected:
   bool firstUse;
   Eigen::Isometry2f prevTransf; 
   Eigen::Isometry3f prevOdom; 
-  
 };
 
 
