@@ -96,7 +96,7 @@ struct MyVSetCostFunction : public HyperDijkstra::CostFunction {
 
 #define MAX_GRAPH_DIST_SM 2.0 //Max distance in the graph to find neighbors for a vertex 
 #define MIN_GRAPH_DIST_LC 5.0 //Min distance in the graph for a vertex to be considered for loop closing
-#define MAX_EUC_DIST_LC 50.0 //Max euclidean distance for a vertex to be considered for loop closing 
+#define MAX_EUC_DIST_LC 10.0 //Max euclidean distance for a vertex to be considered for loop closing 
 
 class VerticesFinder{
  public:

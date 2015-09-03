@@ -236,11 +236,9 @@ namespace tsm {
     // cv::imshow( "Correspondences After", img);
     // cv::waitKey(0);
     
-    //_current->transformInPlace(_solver->T());
     _projector->project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), *_reference);
-    //_projector->project(current_ranges, current_indices, Eigen::Isometry2f::Identity(), *_current);
     _projector->project(current_ranges, current_indices, _solver->T(), *_current);
-
+        
     int size = std::min(reference_indices.size(), current_indices.size());
 
     for (int c = 0; c < size; ++c) {
@@ -260,26 +258,24 @@ namespace tsm {
 	  ++outliers;
       }
     }
+
     _correspondences_ratio  = (float)num_correspondences/(float)_current->size();
+    mean_dist /= num_correspondences;
+    float current_bad_points_ratio = outliers / num_correspondences;
+    _inliers_ratio = 1 - current_bad_points_ratio;
+
     if (_correspondences_ratio < _min_correspondences_ratio) {
       if(_current && _current != _reference) {
-	std::cerr << "Too few correspondences:" << std::endl
-		  << "current: " << _current 
-		  << " size: " << _current->size()
-		  << " num_correspondences: " << num_correspondences 
+	std::cerr << "Too few correspondences:" << num_correspondences 
 		  << " ratio: " << _correspondences_ratio << std::endl;
-	dump();
+	//dump();
       }
 
       return false;
     }
 
-    mean_dist /= num_correspondences;
-    float current_bad_points_ratio = outliers / num_correspondences;
-    _inliers_ratio = 1 - current_bad_points_ratio;
-
     if (current_bad_points_ratio > _bpr) {
-      dump();
+      //dump();
       std::cerr << "Match failed" << std::endl;
       //std::cerr << "Mean dist: " << mean_dist << std::endl;
       //std::cerr << "Outliers: " << outliers << std::endl;

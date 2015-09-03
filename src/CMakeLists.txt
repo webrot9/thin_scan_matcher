@@ -17,12 +17,11 @@ target_link_libraries(thin_scan_matcher_node
   ${catkin_LIBRARIES}
 )
 
-
-add_executable(my_test 
-  my_test.cpp 
+add_executable(test1
+  test1.cpp 
 )
 
-target_link_libraries(my_test
+target_link_libraries(test1
   tsm_library
   ${catkin_LIBRARIES}
   ${CSPARSE_LIBRARY}
@@ -34,11 +33,11 @@ target_link_libraries(my_test
   ${G2O_TYPES_SLAM2D}
 )
 
-add_executable(my_test2 
-  my_test2.cpp 
+add_executable(test2 
+  test2.cpp 
 )
 
-target_link_libraries(my_test2
+target_link_libraries(test2
   tsm_library
   ${catkin_LIBRARIES}
   ${CSPARSE_LIBRARY}
@@ -50,15 +49,15 @@ target_link_libraries(my_test2
   ${G2O_TYPES_SLAM2D}
 )
 
-add_executable(my_test3
-  my_test3.cpp 
+add_executable(test3
+  test3.cpp 
   graph_slam/vertices_finder.cpp
   graph_slam/closure_buffer.cpp
   graph_slam/closure_checker.cpp
   graph_slam/graph_manipulator.cpp
 )
 
-target_link_libraries(my_test3
+target_link_libraries(test3
   tsm_library
   ${catkin_LIBRARIES}
   ${CSPARSE_LIBRARY}

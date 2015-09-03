@@ -31,6 +31,7 @@
 #include "graph_slam/closure_buffer.h"
 #include "graph_slam/closure_checker.h"
 #include "graph_slam/graph_manipulator.h"
+#include "g2o/stuff/command_args.h"
 
 #include <Eigen/Geometry> 
 
@@ -42,11 +43,12 @@ using namespace g2o;
 LaserMessage l;
 
 const char* banner[]={
-  "txt_io_dump_reader_app: a simple example on reading a dump file written with txt io",
-  " it reads sequentially all elements in the file",
-  " instantiates the objects and prints the class name",
+  "test3: runs the tracker with the laserscans of a dump file written with txt io",
+  "process a number of laserscans equal to max_nodes separated by a certain distance",
+  "looks for possible loop closures",
+  "the result is saved in a g2o graph",
   "",
-  "usage: my_test <dump_file> max_nodes",
+  "Error: you must provide some parameter. Use 'test3 -h' for help. ",
   0
 };
 
@@ -121,6 +123,7 @@ public:
     _currentVertex = 0;
     _previousVertex = 0;
     _projector = 0;
+
   };
   
   void addVertex(LaserMessage* las_msg){
@@ -163,23 +166,20 @@ public:
     _currentVertex = v;
   };
 
-  EdgeSE2* createEdgeSE2(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
+  EdgeSE2* createEdgeSE2(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf, Eigen::Matrix3d inf){
     SE2 displacement(rel_transf.cast<double>());
 
     EdgeSE2 *e = new EdgeSE2;
     e->vertices()[0] = v1;
     e->vertices()[1] = v2;
     e->setMeasurement(displacement);
-  
-    Matrix3d inf =  100 * Matrix3d::Identity();
-    inf(2,2) = 1000;
     e->setInformation(inf);
 
     return e;
   };
 
-  void addEdge(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
-    EdgeSE2 *e = createEdgeSE2(v1,v2,rel_transf);
+  void addEdge(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf, Eigen::Matrix3d inf){
+    EdgeSE2 *e = createEdgeSE2(v1,v2,rel_transf,inf);
 
     std::cerr << "Adding Edge between : " << v1->id() << " and " << v2->id() << ". Displacement: " << e->measurement().translation().x() << " " << e->measurement().translation().y() << " " << e->measurement().rotation().angle() << std::endl;
     _graph->addEdge(e);
@@ -252,9 +252,9 @@ public:
 	
   	//try to match
   	//Parameters (fixed by the moment)
-  	double bpr = 0.2;
+  	double bpr = 1;
   	int iterations = 10;
-  	double inlier_distance = .5;
+  	double inlier_distance = 2.;
   	double min_correspondences_ratio = 0.3;
   	double local_map_clipping_range = 10.0;
   	double local_map_clipping_translation_threshold = 5.0;
@@ -294,28 +294,28 @@ public:
 	  
 	  Eigen::Rotation2Dd rotation(0); 
 	  rotation.fromRotationMatrix(initguess2d.linear());
-	  std::cerr << endl << "Initial guess: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
+	  //std::cerr << endl << "Initial guess: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
 
 	  bool success = tracker.match(initguess2d.cast<float>());
 	  if (success){
-	    rotation.fromRotationMatrix(tracker.solver()->T().linear());
-	    std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
-	    cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
-	    MatcherResult mr(tracker.solver()->T(), tracker.correspondencesRatio()*tracker.inliersRatio());
+	    //rotation.fromRotationMatrix(tracker.solver()->T().linear());
+	    //std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
+	    //cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
+	    MatcherResult mr(tracker.solver()->T(), tracker.inliersRatio());
 	    mresvec.push_back(mr);
 	  }
 
 	  Eigen::Rotation2Dd rotationPI(M_PI); 
 	  initguess2d.linear() = initguess2d.linear()*rotationPI;
 	  rotation.fromRotationMatrix(initguess2d.linear());
-	  std::cerr << endl << "Initial guess M_PI: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
+	  //std::cerr << endl << "Initial guess M_PI: " << initguess2d.translation().x() << " " << initguess2d.translation().y() << " " << rotation.angle() << std::endl;
 
 	  success = tracker.match(initguess2d.cast<float>());
 	  if (success){
-	    rotation.fromRotationMatrix(tracker.solver()->T().linear());
-	    std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
-	    cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
-	    MatcherResult mr(tracker.solver()->T(), tracker.correspondencesRatio()*tracker.inliersRatio());
+	    //rotation.fromRotationMatrix(tracker.solver()->T().linear());
+	    //std::cerr << "Result: " << tracker.solver()->T().translation().x() << " " << tracker.solver()->T().translation().y() << " " << rotation.angle() << std::endl;
+	    //cerr << "Inliers ratio: " << tracker.inliersRatio() << endl;
+	    MatcherResult mr(tracker.solver()->T(), tracker.inliersRatio());
 	    mresvec.push_back(mr);
 	  }
 	}
@@ -326,14 +326,17 @@ public:
 	  
 	  //Introducing results in closure checker
 	  //for (std::vector<MatcherResult>::iterator itmr = mresvec.begin(); itmr != mresvec.end(); itmr++){
-	  //  Eigen::Isometry2f res = (*itmr).transformation;
+	  //Eigen::Isometry2f res = (*itmr).transformation;
 	  Eigen::Isometry2f bestResult = mresvec[0].transformation;
 	  cerr << "BEST SCORE:" << mresvec[0].score << endl;
 	  cerr << "Loop closure between " << refv->id() << " and " << curv->id() << " accepted." << endl;
 	    
-	  EdgeSE2 *ne = createEdgeSE2(refv, curv, bestResult);
-	  loopClosingEdges.insert(ne);
-	  //}
+	  Matrix3d inf =  500 * Matrix3d::Identity();
+	  inf(2,2) = 5000;
+	  EdgeSE2 *ne = createEdgeSE2(refv, curv, bestResult, inf);
+	  //EdgeSE2 *ne = createEdgeSE2(refv, curv, res, inf);
+	    loopClosingEdges.insert(ne);
+	    //}
 	}else
 	  cerr << "Loop closure between " << refv->id() << " and " << curv->id() << " rejected." << endl;
 	
@@ -348,7 +351,7 @@ public:
 
   void checkClosures(){
     int windowLoopClosure = 10;
-    float inlierThreshold = 3.0;
+    float inlierThreshold = 2.5;
     int minInliers = 6;
     
     LoopClosureChecker lcc;
@@ -461,14 +464,17 @@ public:
 	    std::cerr << "Result: " << global_t.translation().x() << " " << global_t.translation().y() << " " << rotation.angle() << std::endl;
 	  
 	    _gmap.addVertex(las);
-	    _gmap.addEdge(_gmap.previousVertex(), graphMap().currentVertex(), prevTransf.inverse()*global_t);
+	    Matrix3d inf =  100 * Matrix3d::Identity();
+	    inf(2,2) = 1000;
+  	    _gmap.addEdge(_gmap.previousVertex(), graphMap().currentVertex(), prevTransf.inverse()*global_t,inf);
 	    _gmap.optimize(1);
 	    prevTransf = global_t;
 	  }
 	  else{
 	    //Trust the odometry
 	    _gmap.addVertex(las);
-	    _gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), initial_guess);
+	    Matrix3d inf =  100 * Matrix3d::Identity();
+	    _gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), initial_guess, inf);
 	    _gmap.optimize(1);
 	  }
 	  	  
@@ -494,23 +500,36 @@ protected:
 
 
 int main(int argc, char **argv){
-  if (argc<3 || ! strcmp(argv[1],"-h")) {
+  if (argc<2) {
     printBanner(banner);
     return 0;
   }
 
+  CommandArgs arg;
+  string dumpFilename, outgraphFilename;
+  int max_count;
+  double bpr;
+  int iterations;
+  double inlier_distance;
+  double min_correspondences_ratio;
+  double local_map_clipping_range;
+  double local_map_clipping_translation_threshold;
+
+  arg.param("bpr", bpr, 0.2, "tracker bad points ratio"); //1
+  arg.param("it", iterations, 10, "tracker iterations"); 
+  arg.param("inlier_distance", inlier_distance, 0.5, "tracker inlier distance"); //2
+  arg.param("min_correspondences_ratio", min_correspondences_ratio, 0.3, "tracker minimum correspondences ratio");
+  arg.param("local_map_clipping_range", local_map_clipping_range, 10.0, "tracker local map clipping range");
+  arg.param("local_map_clipping_translation_threshold", local_map_clipping_translation_threshold, 5.0, "tracker local map clipping translation threshold");
+  arg.param("maxcount", max_count, 0, "test finishes when <maxcount> laserscans have been processed (0=process all)");
+  arg.param("o", outgraphFilename, "out.g2o", "file where to save the output graph");
+  arg.paramLeftOver("dump-file", dumpFilename, "", "input dump file in txt io format");
+  arg.parseArgs(argc, argv);
+
   MessageReader reader;
-  reader.open(argv[1]);
+  reader.open(dumpFilename);
 
   double init = getTime();
-
-  //Parameters (fixed by the moment)
-  double bpr = 0.2;
-  int iterations = 10;
-  double inlier_distance = .5;
-  double min_correspondences_ratio = 0.3;
-  double local_map_clipping_range = 10.0;
-  double local_map_clipping_translation_threshold = 5.0;
 
   //Init tracker
   tsm::Tracker tracker;
@@ -528,7 +547,8 @@ int main(int argc, char **argv){
   IDoMyStuffTrigger* idmst = new IDoMyStuffTrigger(sorter, tracker);
   BaseMessage* msg=0;
 
-  int max_count = atoi(argv[2]);
+  if (max_count == 0)
+    max_count =std::numeric_limits<int>::max();
   int count = 0;
   while ((count < max_count) && (msg = reader.readMessage()) ) {
     txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
@@ -544,6 +564,6 @@ int main(int argc, char **argv){
   double finish = getTime() - init;
   cerr << "Total Laserscans: " << count << ". Final graph size: " << idmst->graphMap().graph()->vertices().size() << ". Took " << finish << " seconds" << endl;
   cerr << "Saving file...";
-  idmst->graphMap().saveGraph("prueba.g2o");
+  idmst->graphMap().saveGraph(outgraphFilename.c_str());
   cerr << "Finished" << endl;
 }

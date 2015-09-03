@@ -62,27 +62,27 @@ namespace tsm {
     }
   }
 
-  // void CorrespondenceFinder2D::drawCorrespondences(RGBImage &img, Eigen::Isometry2f T, float scale) const {
-  //   _solver->current()->draw(img, cv::Vec3b(0,255,0), false, T, false, scale);
-  //   _solver->reference()->draw(img, cv::Vec3b(0,0,255), false, Eigen::Isometry2f::Identity(), false, scale);
+  void CorrespondenceFinder2D::drawCorrespondences(RGBImage &img, Eigen::Isometry2f T, float scale) const {
+    _solver->current()->draw(img, cv::Vec3b(0,255,0), false, T, false, scale);
+    _solver->reference()->draw(img, cv::Vec3b(0,0,255), false, Eigen::Isometry2f::Identity(), false, scale);
     
-  //   T.linear()*=scale;
-  //   for (size_t i = 0; i < _correspondences.size(); ++i) {
-  //      int idx1 = _indices_current[_correspondences[i]];
-  //      int idx2 = _indices_reference[_correspondences[i]];
+    T.linear()*=scale;
+    for (size_t i = 0; i < _correspondences.size(); ++i) {
+       int idx1 = _indices_current[_correspondences[i]];
+       int idx2 = _indices_reference[_correspondences[i]];
 
-  //      Eigen::Vector2f pt_curr = T*(*_solver->current())[idx1].point() * 0.5;
-  //      Eigen::Vector2f pt_ref = T*(*_solver->reference())[idx2].point() * 0.5;
+       Eigen::Vector2f pt_curr = T*(*_solver->current())[idx1].point() * 0.5;
+       Eigen::Vector2f pt_ref = T*(*_solver->reference())[idx2].point() * 0.5;
 
-  //      float center_x = img.cols * 0.5;
-  //      float center_y = img.rows * 0.5;
-  //      cv::line(img,
-  // 		cv::Point(pt_curr.x() + center_x, pt_curr.y() + center_y),
-  // 		cv::Point(pt_ref.x() + center_x, pt_ref.y() + center_y),
-  // 		cv::Scalar(255, 0, 0)
-  // 		);
-  //   }
-  // }
+       float center_x = img.cols * 0.5;
+       float center_y = img.rows * 0.5;
+       cv::line(img,
+  		cv::Point(pt_curr.x() + center_x, pt_curr.y() + center_y),
+  		cv::Point(pt_ref.x() + center_x, pt_ref.y() + center_y),
+  		cv::Scalar(255, 0, 0)
+  		);
+    }
+  }
     
 
   void CorrespondenceFinder2D::drawCorrespondences(Eigen::Isometry2f T) const {

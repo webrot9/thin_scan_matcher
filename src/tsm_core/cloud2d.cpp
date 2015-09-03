@@ -95,69 +95,69 @@ namespace tsm{
     model = sparse_model;
   }
 
-  // void Cloud2D::draw(RGBImage &img, cv::Vec3b color, bool draw_normals, Eigen::Isometry2f T,
-  // 		     bool draw_pose_origin, float scale) const {
-  //   std::vector<cv::Point2i> normal_to_draw, pt_to_draw;
-  //   float max_value = std::numeric_limits<float>::min();
+  void Cloud2D::draw(RGBImage &img, cv::Vec3b color, bool draw_normals, Eigen::Isometry2f T,
+  		     bool draw_pose_origin, float scale) const {
+    std::vector<cv::Point2i> normal_to_draw, pt_to_draw;
+    float max_value = std::numeric_limits<float>::min();
 
-  //   for(Cloud2D::const_iterator it = begin(); it != end(); ++it) {
-  //     Eigen::Vector2f pt = T * it->point();
-  //     Eigen::Vector2f n = T.linear() * it->normal();
-  //     float value = std::max(std::fabs(pt.x()), std::fabs(pt.y()));
+    for(Cloud2D::const_iterator it = begin(); it != end(); ++it) {
+      Eigen::Vector2f pt = T * it->point();
+      Eigen::Vector2f n = T.linear() * it->normal();
+      float value = std::max(std::fabs(pt.x()), std::fabs(pt.y()));
 
-  //     if (value > max_value)
-  // 	max_value = value + 1;
+      if (value > max_value)
+  	max_value = value + 1;
 
-  //     pt = pt * scale * 0.5;
-  //     n = n * scale * 0.5;
+      pt = pt * scale * 0.5;
+      n = n * scale * 0.5;
       
-  //     if (pt.x() != pt.x() || pt.y() != pt.y())
-  // 	continue;
+      if (pt.x() != pt.x() || pt.y() != pt.y())
+  	continue;
 
-  //     pt_to_draw.push_back(cv::Point2i(static_cast<int>(pt.x()), static_cast<int>(pt.y())));
-  //     normal_to_draw.push_back(cv::Point2i(static_cast<int>(n.x()), static_cast<int>(n.y())));
-  //   }
+      pt_to_draw.push_back(cv::Point2i(static_cast<int>(pt.x()), static_cast<int>(pt.y())));
+      normal_to_draw.push_back(cv::Point2i(static_cast<int>(n.x()), static_cast<int>(n.y())));
+    }
 
-  //   float max_dest_size = std::max(img.rows, img.cols);
-  //   int img_size = std::max(max_value * scale, max_dest_size);
+    float max_dest_size = std::max(img.rows, img.cols);
+    int img_size = std::max(max_value * scale, max_dest_size);
 
-  //   RGBImage tmp = cv::Mat::zeros(img_size, img_size, CV_8UC3);
-  //   for(size_t i = 0; i < pt_to_draw.size(); ++i) {
-  //     cv::Point2i& pt = pt_to_draw[i];
+    RGBImage tmp = cv::Mat::zeros(img_size, img_size, CV_8UC3);
+    for(size_t i = 0; i < pt_to_draw.size(); ++i) {
+      cv::Point2i& pt = pt_to_draw[i];
       
-  //     pt.x += img_size * 0.5;
-  //     pt.y += img_size * 0.5;
+      pt.x += img_size * 0.5;
+      pt.y += img_size * 0.5;
       
-  //     cv::Point2i& normal = normal_to_draw[i];
+      cv::Point2i& normal = normal_to_draw[i];
 
-  //     if (draw_normals)
-  // 	cv::line(tmp,
-  // 		 pt,
-  // 		 pt + normal,
-  // 		 100
-  // 		 );
+      if (draw_normals)
+  	cv::line(tmp,
+  		 pt,
+  		 pt + normal,
+  		 100
+  		 );
 
-  //     tmp.at<cv::Vec3b>(pt.y,pt.x) = color;
-  //   }
+      tmp.at<cv::Vec3b>(pt.y,pt.x) = color;
+    }
     
-  //   cv::circle(tmp,
-  // 	       cv::Point(T.translation().x() * scale * 0.5 + img_size * 0.5,
-  // 			 T.translation().y() * scale * 0.5 + img_size * 0.5),
-  // 	       3,
-  // 	       cv::Scalar(color[0],color[1],color[2]),
-  // 	       CV_FILLED);
+    cv::circle(tmp,
+  	       cv::Point(T.translation().x() * scale * 0.5 + img_size * 0.5,
+  			 T.translation().y() * scale * 0.5 + img_size * 0.5),
+  	       3,
+  	       cv::Scalar(color[0],color[1],color[2]),
+  	       CV_FILLED);
 	       
-  //   if (img.size().area() > 0) {
-  //     float max_cols = std::max(img.cols, tmp.cols);
-  //     cv::Rect roi = cv::Rect((tmp.cols - img.cols) * 0.5,
-  // 			      (tmp.rows - img.rows) * 0.5,
-  // 			      img.cols,
-  // 			      img.rows);
-  //     tmp(roi) += img;
-  //   }
+    if (img.size().area() > 0) {
+      float max_cols = std::max(img.cols, tmp.cols);
+      cv::Rect roi = cv::Rect((tmp.cols - img.cols) * 0.5,
+  			      (tmp.rows - img.rows) * 0.5,
+  			      img.cols,
+  			      img.rows);
+      tmp(roi) += img;
+    }
 
-  //   img = tmp;
-  // }
+    img = tmp;
+  }
 
   Cloud2D::~Cloud2D(){}
 
