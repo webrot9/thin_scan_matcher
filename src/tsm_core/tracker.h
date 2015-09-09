@@ -43,13 +43,18 @@ namespace tsm {
 
     inline void setLocalMapClippingRange(float range) { _local_map_clipping_range = range; }
     inline void setClipTranslationThreshold(float t) { _clip_translation_threshold = t; }
+    
+    inline void setVoxelizeResolution(float res) { _voxelize_resolution = res; }
+    inline float voxelizeResolution() const { return _voxelize_resolution;}
+    inline float cycleTime() const {return _cycle_time;}
 
   private:
     int _iterations;
     float _bpr;
     float _inlier_distance;
     float _min_correspondences_ratio;
-    
+    float _cycle_time;    
+
     Eigen::Isometry2f _global_t;
     Eigen::Isometry2f _last_clipped_pose;
     float _clip_translation_threshold;
@@ -59,6 +64,6 @@ namespace tsm {
     Solver2D *_solver;
     Projector2D *_projector;
     CorrespondenceFinder2D _correspondence_finder;
-    CloudProcessor _cloud_processor;
+    float _voxelize_resolution;
   };
 }

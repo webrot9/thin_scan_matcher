@@ -1,6 +1,7 @@
 #include "projector2d.h"
 
 #include <Eigen/Eigenvalues> 
+using namespace std;
 
 namespace tsm {
   Projector2D::Projector2D() {
@@ -42,7 +43,7 @@ namespace tsm {
       Eigen::Vector2f n = R * rp.normal();
 
       float angle = atan2(p.y(), p.x());
-      int bin = angle * inverse_angle_increment + middle;
+      int bin = (int)(angle * inverse_angle_increment + middle);
 
       if (bin < 0 || bin >= _num_ranges)
 	continue;
@@ -55,7 +56,7 @@ namespace tsm {
       else 
 	continue;
 
-      indices[bin] = (p.dot(n) < 0) ? i : -1;
+      indices[bin] = (p.dot(n) <= 0) ? i : -1;
     }
   }
 
@@ -146,7 +147,7 @@ namespace tsm {
     }
 
     model.resize(k);
-
+    
     // extract the normals, naive way
     for (size_t i = 0; i < model.size(); ++i) {
       // for each point go left and right, until the distance
@@ -177,9 +178,10 @@ namespace tsm {
 
       model[i]._normal.setZero();
 
-      if (imax - imin < minPoints)
+      if (imax - imin < minPoints) {
+	model[i]._normal.setZero();
 	continue;
-
+      }
       mean.setZero();
       cov.setZero();
 
@@ -196,9 +198,9 @@ namespace tsm {
 
       eigenSolver.computeDirect(cov, Eigen::ComputeEigenvectors);
  
-      if (eigenSolver.eigenvalues()(0) / eigenSolver.eigenvalues()(1) > 1e-1)
+      if (eigenSolver.eigenvalues()(0) / eigenSolver.eigenvalues()(1) > 1e-1) {
 	continue;
-
+      }
       Eigen::Vector2f n = eigenSolver.eigenvectors().col(0);
 
       if (p0.dot(n) > 0)

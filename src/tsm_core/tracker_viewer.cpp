@@ -93,13 +93,11 @@ namespace tsm {
     glPushAttrib(GL_COLOR|GL_POINT_SIZE);
     glPointSize(1);
     if (_tracker->reference()) {
-      glColor3f(1,0,0);
-      _tracker->reference()->draw();
+      _tracker->reference()->draw(true);
     }
 
     glPointSize(3);
     if (_tracker->current()) {
-      glColor3f(0,0,1);
       _tracker->current()->draw(false, _tracker->solver()->T().inverse(),false,true);
     }
     glPopAttrib();

@@ -12,6 +12,7 @@ namespace tsm {
       _normal = n; 
       _accumulator = a;
       _is_normalized = true;
+      _color = Eigen::Vector3f(0,0,0);
     }
 
     inline RichPoint2D& operator+=(const RichPoint2D& rp) {
@@ -35,6 +36,10 @@ namespace tsm {
     inline RichPoint2D transform(const Eigen::Isometry2f& iso) const {
       return RichPoint2D(iso * _point, iso.linear() * _normal, _accumulator);
     }
+
+    inline const Eigen::Vector3f& color() const {return _color;}
+
+    inline void setColor(const Eigen::Vector3f& color_) {_color=color_;}
 
     inline void denormalize() {
       if (!_is_normalized) {
@@ -68,5 +73,6 @@ namespace tsm {
     Eigen::Vector2f _normal;
     float _accumulator;
     bool _is_normalized;
+    Eigen::Vector3f _color;
   };
 }
