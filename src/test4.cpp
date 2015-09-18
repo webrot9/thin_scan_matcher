@@ -19,8 +19,10 @@
 
 // g2o
 #include "g2o/stuff/command_args.h"
+#include "g2o/apps/g2o_viewer/g2o_qglviewer.h"
 
 #include "graph_slam/simple_graph.h"
+#include "graph_slam/closures_finder.h"
 
 #include <Eigen/Geometry> 
 
@@ -46,8 +48,11 @@ public:
     _projector = 0;
     _tracker = tracker;
     firstUse = true;
+    _trans_step = 0.5;
+    _rot_step = M_PI_4;
     prevTransf = Eigen::Isometry2f::Identity();
     prevOdom = Eigen::Isometry3f::Identity();
+    _cf.setGraphMap(&_gmap);
   }
 
   virtual void action(std::tr1::shared_ptr<BaseSensorMessage> msg) {
@@ -56,7 +61,6 @@ public:
     LaserMessage* las = dynamic_cast<LaserMessage*>(msg.get());
     if(las) {
       cerr << msg->tag() << endl;
-      Eigen::Isometry2f global_t = Eigen::Isometry2f::Identity();
       if (firstUse){
 	//First use: setting projector with laser info
 	_projector = new tsm::Projector2D();
@@ -66,78 +70,103 @@ public:
 	_projector->setFov(las->maxAngle()-las->minAngle());
 
 	_tracker->setProjector(_projector);
+	_cf.setProjector(_projector);
 
-	tsm::Cloud2D* cloud = new tsm::Cloud2D();
-	_projector->unproject(*cloud, las->ranges());
-	_tracker->update(cloud);
-	global_t = _tracker->globalT();	
-	std::cerr << "FIRST USE tracker result: " << global_t.matrix() << std::endl;
-
+	prevOdom = las->odometry(); 
+	//set first virtex in (0,0,0)
+	las->setOdometry(Eigen::Isometry3f::Identity());
 	_gmap.addVertex(las);
 	_gmap.currentVertex()->setFixed(true);
 	firstUse = false;
-	prevOdom = las->odometry();
-	prevTransf = global_t;
-      }else{
-	Eigen::Isometry3f displacement = prevOdom.inverse()*las->odometry();
-	Eigen::Rotation2Dd rotation(0); 
-	rotation.fromRotationMatrix(displacement.linear().block<2,2>(0,0));
-	float trans_step = 0.3;
-	float rot_step = M_PI_4;
-	if ((sqrt(displacement.translation().x()*displacement.translation().x() + displacement.translation().y()*displacement.translation().y()) > trans_step) || rotation.angle() > rot_step){
-	  Eigen::Isometry3f odom = las->odometry(); 
-	  std::cerr << "ODOM: \n" << odom.matrix() << std::endl;
-	  
-	  tsm::Cloud2D* cloud = new tsm::Cloud2D();
-	  _projector->unproject(*cloud, las->ranges());
-	  
-	  Eigen::Isometry2f initial_guess = Eigen::Isometry2f::Identity();
-	  initial_guess.translation().x() = displacement.translation().x();
-	  initial_guess.translation().y() = displacement.translation().y();
-	  initial_guess.linear() = displacement.linear().block<2,2>(0,0);
-
-	  Eigen::Rotation2Dd rotation(0); 
-	  rotation.fromRotationMatrix(initial_guess.linear());
-	  std::cerr << "Initial guess: " << initial_guess.translation().x() << " " << initial_guess.translation().y() << " " << rotation.angle() << std::endl;
-	  rotation.fromRotationMatrix(prevTransf.linear());
-	  std::cerr << "Previous Transf: " << prevTransf.translation().x() << " " << prevTransf.translation().y() << " " << rotation.angle() << std::endl;
-
-	  bool success = _tracker->update(cloud, initial_guess);
-	  if (success){
-	    global_t = _tracker->globalT();
-	    
-	    rotation.fromRotationMatrix(global_t.linear());
-	    std::cerr << "Result: " << global_t.translation().x() << " " << global_t.translation().y() << " " << rotation.angle() << std::endl;
-	    
-	    _gmap.addVertex(las);
-	    Matrix3d inf =  1000 * Matrix3d::Identity();
-	    inf(2,2) = 10000;
-	    _gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), prevTransf.inverse()*global_t, inf);
-	    
-	    prevTransf = global_t;
-	  }
-	  else{
-	    //Trust the odometry
-	    _gmap.addVertex(las);
-	    Matrix3d inf =  100 * Matrix3d::Identity();
-	    _gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), initial_guess, inf);
-	  }
-	  prevOdom = las->odometry();
-	}	
+	prevTransf = Eigen::Isometry2f::Identity();
       }
+
+      std::cerr << "Odom: " << las->odometry().translation().transpose() << std::endl;
+
+
+      tsm::Cloud2D* cloud = new tsm::Cloud2D();
+      _projector->unproject(*cloud, las->ranges());
+      bool success = _tracker->update(cloud);
+
+      Eigen::Isometry2f global_t = _tracker->globalT();	
+
+      Eigen::Isometry2f displacement = prevTransf.inverse()*global_t;
+      Eigen::Rotation2Dd rotation(0); 
+      rotation.fromRotationMatrix(displacement.linear().block<2,2>(0,0));
+
+      if ((sqrt(displacement.translation().x()*displacement.translation().x() + displacement.translation().y()*displacement.translation().y()) > _trans_step) || fabs(rotation.angle()) > _rot_step ){//|| !success){
+	Eigen::Isometry3f odom = las->odometry(); 
+	Eigen::Isometry3f odom_displacement = prevOdom.inverse()*odom;
+	Eigen::Isometry2f odom_displacement2f = Eigen::Isometry2f::Identity();
+	odom_displacement2f.translation().x() = odom_displacement.translation().x();
+	odom_displacement2f.translation().y() = odom_displacement.translation().y();
+	odom_displacement2f.linear() = odom_displacement.linear().block<2,2>(0,0);
+
+	//create projector of 2*M_PI
+	float fov = 2*M_PI; 
+	int num_ranges = 720;
+	tsm::Projector2D p;
+	p.setFov(fov);
+	p.setNumRanges(num_ranges);
+	
+	//project current cloud to ranges
+	tsm::FloatVector reference_ranges;
+	tsm::IntVector reference_indices;
+	p.project(reference_ranges, reference_indices, Eigen::Isometry2f::Identity(), *_tracker->reference());
+	//create laser data from ranges
+	LaserMessage* las_msg = new LaserMessage();
+	
+	las_msg->setOdometry(odom);
+	las_msg->setMinAngle(0);
+	las_msg->setMaxAngle(fov);
+	las_msg->setAngleIncrement(p.angleIncrement());
+	las_msg->setMinRange(p.minRange());
+	las_msg->setMaxRange(p.maxRange());
+	las_msg->setRanges(reference_ranges);
+	
+	//include in g2o
+	_gmap.addVertex(las);
+	Matrix3d inf =  100 * Matrix3d::Identity();
+	inf(2,2) *= 10;
+	//if (success){
+	  //include both relative displacement from odom and tracker
+	  _gmap.addEdge(_gmap.previousVertex(), graphMap().currentVertex(), displacement, inf);
+	  //inf *=0.1;
+	  //_gmap.addEdge(_gmap.previousVertex(), graphMap().currentVertex(),  odom_displacement2f, inf);
+	  //}
+	  /*else{
+	  //include just odometry with low information matrix
+	  //inf *=0.1;
+	  _gmap.addEdge(_gmap.previousVertex(), graphMap().currentVertex(),  odom_displacement2f, inf);
+	  }*/
+
+	prevTransf = global_t;
+	_gmap.optimize(1);
+	_cf.findClosures();
+	_gmap.optimize(1);
+	_gmap.saveGraph("aux.g2o"); 
+	prevOdom = odom;
+      }
+
     }
   }
 
   inline SimpleGraphMap graphMap(){return _gmap;}
-
+  inline void setTranslationStep(float trans_step){_trans_step = trans_step;}
+  inline void setRotationStep(float rot_step){_rot_step = rot_step;}
+  
+  inline ClosuresFinder& closuresFinder(){return _cf;}
 protected:
   tsm::Projector2D* _projector;
   tsm::Tracker* _tracker;
   SimpleGraphMap _gmap;
   bool firstUse;
-  Eigen::Isometry2f prevTransf; 
-  Eigen::Isometry3f prevOdom; 
   
+  float _trans_step, _rot_step;
+  
+  Eigen::Isometry2f prevTransf; 
+  Eigen::Isometry3f prevOdom;
+  ClosuresFinder _cf;
 };
 
 
@@ -157,15 +186,25 @@ int main(int argc, char **argv){
   double min_correspondences_ratio;
   double local_map_clipping_range;
   double local_map_clipping_translation_threshold;
+  float trans_step, rot_step;
+  int cf_min_inliers;
+  float cf_inlier_threshold;
+  int skip;
 
   arg.param("bpr", bpr, 0.2, "tracker bad points ratio");
   arg.param("it", iterations, 10, "tracker iterations");
-  arg.param("inlier_distance", inlier_distance, 0.5, "tracker inlier distance");
+  arg.param("inlier_distance", inlier_distance, 0.1, "tracker inlier distance");
   arg.param("min_correspondences_ratio", min_correspondences_ratio, 0.3, "tracker minimum correspondences ratio");
   arg.param("local_map_clipping_range", local_map_clipping_range, 10.0, "tracker local map clipping range");
   arg.param("local_map_clipping_translation_threshold", local_map_clipping_translation_threshold, 5.0, "tracker local map clipping translation threshold");
+  arg.param("transtep", trans_step, 0.5, "translation step threshold");
+  arg.param("rotstep", rot_step, M_PI_4, "rotation step threshold");
+  arg.param("cf_inlier_threshold", cf_inlier_threshold, 3., "inlier threshold to look for loop closures");
+  arg.param("cf_min_inliers", cf_min_inliers, 6, "mininum number of inliers to look for loop closures");
+
   arg.param("usegui", use_gui, false, "displays gui");
   arg.param("maxcount", max_count, 0, "test finishes when <maxcount> laserscans have been processed (0=process all)");
+  arg.param("skip", skip, 0, "skips the <skip>th first laserscans");
   arg.param("o", outgraphFilename, "out.g2o", "file where to save the output graph");
   arg.paramLeftOver("dump-file", dumpFilename, "", "input dump file in txt io format");
   arg.parseArgs(argc, argv);
@@ -188,35 +227,59 @@ int main(int argc, char **argv){
 
   QApplication* app=0;
   tsm::TrackerViewer* viewer=0;
+  G2oQGLViewer* g2oviewer=0;
+
   if (use_gui) {
     app=new QApplication(argc, argv);
     viewer=new tsm::TrackerViewer(&tracker);
     viewer->init();
     viewer->show();
+    g2oviewer=new G2oQGLViewer;
+    g2oviewer->init();
+    g2oviewer->show();
   }
 
   SensorMessageSorter* sorter = new SensorMessageSorter;
   sorter->setWriteBackEnabled(false);
   IDoMyStuffTrigger* idmst = new IDoMyStuffTrigger(sorter, &tracker);
   BaseMessage* msg=0;
+  
+  idmst->setTranslationStep(trans_step);
+  idmst->setRotationStep(rot_step);
+  idmst->closuresFinder().setMinInliers(cf_min_inliers);
+  idmst->closuresFinder().setInlierThreshold(cf_inlier_threshold);
+
+  if (use_gui)
+    g2oviewer->graph = idmst->graphMap().graph();
 
   if (max_count == 0)
     max_count =std::numeric_limits<int>::max();
   int count = 0;
+  int prevSize = idmst->graphMap().graph()->vertices().size();
+
   while ((count < max_count) && (msg = reader.readMessage()) ) {
-    txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
-    sorter->insertMessage(sensor_msg);
+    if (!skip){
+      txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
+      sorter->insertMessage(sensor_msg);
+      
+      if (use_gui) {
+	viewer->updateGL();
+	int currSize = idmst->graphMap().graph()->vertices().size();
+	if (currSize != prevSize) {
+	  g2oviewer->setUpdateDisplay(true);
+	  g2oviewer->updateGL();
+	  prevSize = currSize;
+	}
+	app->processEvents();
+	usleep(10000);
+      }
 
-    if (use_gui) {
-      viewer->updateGL();
-      app->processEvents();
-      usleep(10000);
-    }
-
-    //for testing
-    LaserMessage* las = dynamic_cast<LaserMessage*>(sensor_msg);
-    if (las)
-      count++;    
+      //for testing
+      LaserMessage* las = dynamic_cast<LaserMessage*>(sensor_msg);
+      if (las)
+	count++;    
+    }else
+      skip--;
   }
 
   sorter->flush();

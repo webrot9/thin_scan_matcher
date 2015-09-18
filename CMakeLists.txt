@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
 SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 set (CMAKE_BUILD_TYPE Release)
+
 #RASPBERRY PI 2 FLAGS
 if ($ENV{HOSTTYPE} MATCHES "arm")
   set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -funsafe-math-optimizations")

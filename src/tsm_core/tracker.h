@@ -20,6 +20,7 @@ namespace tsm {
     inline void reset();
 
     bool match(const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
+    bool recover(const Eigen::Isometry2f& initial_guess=Eigen::Isometry2f::Identity());
 
     // setter & getter
     inline void setIterations(const int &iterations) { _iterations = iterations; }
@@ -68,7 +69,7 @@ namespace tsm {
 
     float _inliers_ratio, _correspondences_ratio;
 
-    Cloud2D *_reference, *_current;
+    Cloud2D *_reference, *_current, *_previous;
     Solver2D *_solver;
     Projector2D *_projector;
     CorrespondenceFinder2D _correspondence_finder;

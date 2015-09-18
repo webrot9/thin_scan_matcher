@@ -83,6 +83,9 @@ FIND_G2O_LIBRARY(G2O_CORE_LIBRARY core)
 # Find the CLI library
 FIND_G2O_LIBRARY(G2O_CLI_LIBRARY cli)
 
+# Find the VIEWER library
+FIND_G2O_LIBRARY(G2O_VIEWER viewer)
+
 # Find the pluggable solvers
 FIND_G2O_LIBRARY(G2O_SOLVER_CHOLMOD solver_cholmod)
 FIND_G2O_LIBRARY(G2O_SOLVER_CSPARSE solver_csparse)

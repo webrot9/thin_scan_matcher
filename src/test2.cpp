@@ -18,17 +18,9 @@
 #include "tsm_core/tracker_viewer.h"
 
 // g2o
-#include "g2o/core/optimizable_graph.h"
-#include "g2o/core/sparse_optimizer.h"
-#include "g2o/core/block_solver.h"
-#include "g2o/core/factory.h"
-#include "g2o/core/optimization_algorithm_factory.h"
-#include "g2o/core/optimization_algorithm_gauss_newton.h"
-#include "g2o/solvers/csparse/linear_solver_csparse.h"
-#include "g2o/types/slam2d/vertex_se2.h"
-#include "g2o/types/slam2d/edge_se2.h"
-#include "g2o/types/data/robot_laser.h"
 #include "g2o/stuff/command_args.h"
+
+#include "graph_slam/simple_graph.h"
 
 #include <Eigen/Geometry> 
 
@@ -46,104 +38,6 @@ const char* banner[]={
   "",
   "Error: you must provide some parameter. Use 'test2 -h' for help. ",
   0
-};
-
-typedef BlockSolver< BlockSolverTraits<-1, -1> >  SlamBlockSolver;
-typedef LinearSolverCSparse<SlamBlockSolver::PoseMatrixType> SlamLinearSolver;
-
-class SimpleGraphMap{
-public:
-  SimpleGraphMap(){
-    _currentId = 0;
-    _graph = new SparseOptimizer();
-    //Init graph
-    SlamLinearSolver* linearSolver = new SlamLinearSolver();
-    linearSolver->setBlockOrdering(false);
-    SlamBlockSolver* blockSolver = new SlamBlockSolver(linearSolver);
-    OptimizationAlgorithmGaussNewton* solver = new OptimizationAlgorithmGaussNewton(blockSolver);
-    _graph->setAlgorithm(solver);
-    _graph->setVerbose(false);
-
-    _currentVertex = 0;
-    _previousVertex = 0;
-  };
-  
-  void addVertex(LaserMessage* las_msg){
-    VertexSE2* v = new VertexSE2;
-    v->setId(_currentId);
-
-    Eigen::Isometry3f odom = las_msg->odometry(); 
-
-    Vector2d translation(odom.translation().x(), odom.translation().y());
-    Eigen::Rotation2Dd rotation(0); 
-    rotation.fromRotationMatrix(odom.linear().block<2,2>(0,0));
-
-    SE2 pose;
-    pose.setTranslation(translation);
-    pose.setRotation(rotation);
-
-    v->setEstimate(pose);
-
-    //Transform LaserMessage to RobotLaser
-    LaserParameters lparams(0, las_msg->ranges().size(), las_msg->minAngle(), las_msg->angleIncrement(), las_msg->maxRange(), 0.1, 0);
-    SE2 trobotlaser(0, 0, 0); //TODO
-    lparams.laserPose = trobotlaser;
-    
-    RobotLaser* rlaser = new RobotLaser;
-    rlaser->setLaserParams(lparams);
-    rlaser->setOdomPose(pose);
-    std::vector<double> ranges(las_msg->ranges().begin(), las_msg->ranges().end());
-
-    rlaser->setRanges(ranges);
-    rlaser->setTimestamp(las_msg->timestamp());
-    rlaser->setLoggerTimestamp(rlaser->timestamp());
-    rlaser->setHostname("hostname");
-    v->setUserData(rlaser);
-    
-    std::cerr << "Adding Vertex: " << v->estimate().translation().x() << " " << v->estimate().translation().y() << " " << v->estimate().rotation().angle() << std::endl;
-
-    _graph->addVertex(v);
-    _currentId++;
-    _previousVertex = _currentVertex;
-    _currentVertex = v;
-  };
-
-  void addEdge(VertexSE2* v1, VertexSE2* v2, Eigen::Isometry2f rel_transf){
-    EdgeSE2 *e = new EdgeSE2;
-    e->vertices()[0] = v1;
-    e->vertices()[1] = v2;
-      
-    // std::cerr << "Vertex 1: " << v1->estimate().translation().x() << " " << v1->estimate().translation().y() << " " << v1->estimate().rotation().angle() << std::endl;
-    // std::cerr << "Vertex 2: " << v2->estimate().translation().x() << " " << v2->estimate().translation().y() << " " << v2->estimate().rotation().angle() << std::endl;
-
-    SE2 displacement(rel_transf.cast<double>());
-    // std::cerr << "Displacement: " << displacement.translation().x() << " " << displacement.translation().y() << " " << displacement.rotation().angle() << std::endl;
-    e->setMeasurement(displacement);
-  
-    Matrix3d inf =  100 * Matrix3d::Identity();
-    inf(2,2) = 1000;
-    
-    e->setInformation(inf);
-    _graph->addEdge(e);
-  };
-  
-  void optimize(int nrunnings){
-    _graph->initializeOptimization();
-    _graph->optimize(nrunnings);
-  };
-
-  bool saveGraph(const char *filename){
-    return _graph->save(filename);
-  };
-
-  inline SparseOptimizer* graph() {return _graph;}
-  inline VertexSE2* currentVertex() {return _currentVertex;}
-  inline VertexSE2* previousVertex() {return _previousVertex;}
-
-protected:
-  SparseOptimizer * _graph;
-  int _currentId;
-  VertexSE2 *_currentVertex, *_previousVertex;
 };
 
 class IDoMyStuffTrigger: public SensorMessageSorter::Trigger {
@@ -184,8 +78,10 @@ public:
 	firstUse = false;
       }else{
 	_gmap.addVertex(las);
-	_gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), prevTransf.inverse()*global_t);
+	Matrix3d inf =  100 * Matrix3d::Identity();
+	_gmap.addEdge(_gmap.previousVertex(), _gmap.currentVertex(), prevTransf.inverse()*global_t, inf);
       }
+      //_gmap.saveGraph("aux.g2o"); 
 
       prevTransf = global_t;
     }
@@ -219,6 +115,7 @@ int main(int argc, char **argv){
   double min_correspondences_ratio;
   double local_map_clipping_range;
   double local_map_clipping_translation_threshold;
+  int skip;
 
   arg.param("bpr", bpr, 0.2, "tracker bad points ratio");
   arg.param("it", iterations, 10, "tracker iterations");
@@ -228,6 +125,7 @@ int main(int argc, char **argv){
   arg.param("local_map_clipping_translation_threshold", local_map_clipping_translation_threshold, 5.0, "tracker local map clipping translation threshold");
   arg.param("usegui", use_gui, false, "displays gui");
   arg.param("maxcount", max_count, 0, "test finishes when <maxcount> laserscans have been processed (0=process all)");
+  arg.param("skip", skip, 0, "skips the <skip>th first laserscans");
   arg.param("o", outgraphFilename, "out.g2o", "file where to save the output graph");
   arg.paramLeftOver("dump-file", dumpFilename, "", "input dump file in txt io format");
   arg.parseArgs(argc, argv);
@@ -267,19 +165,23 @@ int main(int argc, char **argv){
     max_count =std::numeric_limits<int>::max();
   int count = 0;
   while ((count < max_count) && (msg = reader.readMessage()) ) {
-    txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
-    sorter->insertMessage(sensor_msg);
-
-    if (use_gui) {
-      viewer->updateGL();
-      app->processEvents();
-      usleep(10000);
-    }
-
-    //for testing
-    LaserMessage* las = dynamic_cast<LaserMessage*>(sensor_msg);
-    if (las)
-      count++;    
+    if (!skip){
+      txt_io::BaseSensorMessage* sensor_msg = dynamic_cast<txt_io::BaseSensorMessage*>(msg);
+      sorter->insertMessage(sensor_msg);
+      
+      if (use_gui) {
+	viewer->updateGL();
+	app->processEvents();
+	usleep(10000);
+      }
+      
+      //for testing
+      LaserMessage* las = dynamic_cast<LaserMessage*>(sensor_msg);
+      if (las)
+	count++;    
+    }else
+      skip--;
+    
 
   }
 
