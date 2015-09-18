@@ -2,8 +2,11 @@
 #include <string>
 #include <stdexcept>
 #include <GL/gl.h>
+using namespace std;
 
 namespace tsm{
+
+
   void Cloud2D::add(const Cloud2D& other) {
     if (&other == this) {
       return;
@@ -56,43 +59,6 @@ namespace tsm{
     }
 
     resize(k);
-  }
-
-  void Cloud2D::voxelize(Cloud2D& model, float res) {
-    Cloud2D sparse_model;
-    float ires = 1. / res;
-
-    std::vector<IndexPair> voxels(model.size());
-
-    for (int i = 0; i < model.size(); ++i){
-      voxels[i] = IndexPair(model[i].point(), i , ires);
-    }
-
-    sparse_model.resize(model.size());
-    std::sort(voxels.begin(), voxels.end());
-
-    int k = -1;
-    for (size_t i = 0; i < voxels.size(); ++i) { 
-      IndexPair& pair = voxels[i];
-      int idx = pair.index;
-
-      if (k >= 0 && voxels[i].sameCell(voxels[i-1])) {
-	sparse_model[k] += model[idx];
-      } else {
-	sparse_model[++k] = model[idx];
-      } 
-    }
-
-    sparse_model.resize(k);
-
-    for (size_t i = 0; i < sparse_model.size(); ++i) {
-      if (sparse_model[i].accumulator() <= 0)
-	throw std::runtime_error("Negative Point Accumulator");
-
-      sparse_model[i].normalize();
-    }
-
-    model = sparse_model;
   }
 
   void Cloud2D::draw(RGBImage &img, cv::Vec3b color, bool draw_normals, Eigen::Isometry2f T,
@@ -174,14 +140,19 @@ namespace tsm{
     glRotatef(t.z()*180.0f/M_PI,0,0,1);
 
 
+    glPushAttrib(GL_COLOR);
     glBegin(GL_POINTS);
     for(size_t i=0; i<size(); i++){
       const RichPoint2D& p=at(i);
-      glNormal3f(0,0,1);
-      glVertex3f(p.point().x(), p.point().y(), 0);
+      if (p.color().z()>0) {
+      	glColor3f(p.color().x(), p.color().y(), p.color().z());
+	glNormal3f(0,0,1);
+	glVertex3f(p.point().x(), p.point().y(), 0);
+      } 
     }
     glEnd();
-
+    glPopAttrib();
+    
     glPushAttrib(GL_COLOR);
     if (use_fans) {
       glColor4f(.5, .5, .5, 0.1);
@@ -200,14 +171,17 @@ namespace tsm{
 
     float nscale=0.1;
     if (draw_normals){
+      glPushAttrib(GL_COLOR);
       glBegin(GL_LINES);
       for(size_t i=0; i<size(); i++){
 	const RichPoint2D& p=at(i);
+	glColor3f(p.color().x(), p.color().y(), p.color().z());
 	glNormal3f(0,0,1);
 	glVertex3f(p.point().x(), p.point().y(), 0);
-	glVertex3f(p.point().x()+p.normal().x()*nscale, p.point().y()+p.normal().x()*nscale, 0);
+	glVertex3f(p.point().x()+p.normal().x()*nscale, p.point().y()+p.normal().y()*nscale, 0);
       }
       glEnd();
+      glPopAttrib();
     }
     glPopMatrix();
   }

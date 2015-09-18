@@ -34,6 +34,7 @@ namespace tsm {
     _min_correspondences_ratio = 0.5;
     _local_map_clipping_range = 5;
     _clip_translation_threshold = 5;
+    _voxelize_resolution = 0.025;
   }
 
   void Tracker::setSolver(Solver2D* solver) {
@@ -96,6 +97,16 @@ namespace tsm {
     _correspondence_finder.init();
     _solver->setReferencePointsHint(_correspondence_finder.indicesReference());
 
+    for (size_t i=0; i<_reference->size(); i++) {
+      RichPoint2D& p=_reference->at(i);
+      p.setColor(Eigen::Vector3f(1,0,0));
+    }
+
+    for (size_t i=0; i<_current->size(); i++) {
+      RichPoint2D& p=_current->at(i);
+      p.setColor(Eigen::Vector3f(0,1,0));
+    }
+
     for (int i = 0; i < _iterations; ++i) {
       _correspondence_finder.compute();
       _solver->optimize(
@@ -151,12 +162,12 @@ namespace tsm {
     _inliers_ratio = 1 - current_bad_points_ratio;
 
     if (current_bad_points_ratio <= _bpr) {
-      _cloud_processor.merge(reference_ranges, reference_indices, *_reference,
+      CloudProcessor::merge(reference_ranges, reference_indices, *_reference,
 			     current_ranges, current_indices, *_current,
 			     1.f, 0.5f);
 
       _global_t = _global_t * _solver->T();
-      //_reference->voxelize(*_reference, 2);
+      CloudProcessor::voxelize(*_reference, _voxelize_resolution);
       _reference->transformInPlace(_solver->T().inverse());
     } else {
       _last_clipped_pose = _global_t;
@@ -290,8 +301,7 @@ namespace tsm {
 	      << ". Inliers percentage: " << _inliers_ratio << std::endl;
 
     double finish = getTime() - init;
-    std::cerr << "Hz: " << 1.f / finish << " points: " << _reference->size() << std::endl;
-    std::cerr.flush();
+    _cycle_time = finish;
     return true;
   }
 

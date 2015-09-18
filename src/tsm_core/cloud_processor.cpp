@@ -1,6 +1,82 @@
 #include "cloud_processor.h"
-
+#include <stdexcept>
+using namespace std;
 namespace tsm {
+
+    struct IndexPair {
+      EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+      IndexPair() {
+	x = y = 0;
+	index = -1;
+      }
+      
+      // Resolution is in cm
+      IndexPair(const Eigen::Vector2f& v, int idx, float ires) {
+	x = static_cast<int>(ires * v.x());
+	y = static_cast<int>(ires * v.y());
+	index = idx;
+      }
+
+      inline bool operator<(const IndexPair& o) const {
+	if (x < o.x)
+	  return true;
+	if (x > o.x)
+	  return false;
+	if (y < o.y)
+	  return true;
+	if (y > o.y)
+	  return false;
+	if (index < o.index)
+	  return true;
+
+	return false;
+      }
+
+      inline bool sameCell(const IndexPair& o) const {
+	return x == o.x && y == o.y;
+      }
+
+      int x, y, index;
+    };
+
+
+  void CloudProcessor::voxelize(Cloud2D& model, float res) {
+    Cloud2D sparse_model;
+    float ires = 1. / res;
+
+    std::vector<IndexPair> voxels(model.size());
+
+    for (int i = 0; i < model.size(); ++i){
+      voxels[i] = IndexPair(model[i].point(), i , ires);
+    }
+    
+    sparse_model.resize(model.size());
+    std::sort(voxels.begin(), voxels.end());
+
+    int k = -1;
+    for (size_t i = 0; i < voxels.size(); ++i) { 
+      IndexPair& pair = voxels[i];
+      int idx = pair.index;
+
+      if (k >= 0 && voxels[i].sameCell(voxels[i-1])) {
+	sparse_model[k] += model[idx];
+      } else {
+	sparse_model[++k] = model[idx];
+      } 
+    }
+
+    sparse_model.resize(k);
+
+    for (size_t i = 0; i < sparse_model.size(); ++i) {
+      if (sparse_model[i].accumulator() <= 0)
+	throw std::runtime_error("Negative Point Accumulator");
+
+      sparse_model[i].normalize();
+    }
+
+    model = sparse_model;
+  }
+
   void CloudProcessor::merge(FloatVector& dest_ranges, IntVector& dest_indices, Cloud2D& dest,
 				  FloatVector& src_ranges, IntVector& src_indices, Cloud2D& src,
 				  float normal_threshold, float distance_threshold) {
@@ -11,14 +87,15 @@ namespace tsm {
       int& src_idx = src_indices[c];
       int& dest_idx = dest_indices[c];
 
-      if (src_idx < 0 || dest_idx < 0) {
-	// add a point if it appears only in the src and are undefined in the dest
-	if (src_idx > -1 && dest_idx < 0) {
-	  ++new_points;
+      if (dest_idx<0){
+	if (src_idx > -1) {
+	  new_points++;
 	}
-
 	continue;
       }
+      if (src_idx<0)
+	continue;
+
 
       float dest_depth = dest_ranges[c];
       float src_depth = src_ranges[c];
@@ -83,6 +160,7 @@ namespace tsm {
 	continue;
 
       dest[k] = src[src_idx];
+      dest[k].setColor(Eigen::Vector3f(0,0,1));
       k++;
     }
   }

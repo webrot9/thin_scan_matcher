@@ -234,13 +234,17 @@ int main(int argc, char **argv) {
   }
   Eigen::Isometry2f previous_guess;
   bool has_guess=false;
+
+  
+  ros::Rate loop_rate(50);
   while (ros::ok()) {
     std::list<CloudWithTime*>& clouds = message_handler.clouds();
 
-    if (clouds.size() > 0) {
+    float q_size=clouds.size();
+    while (clouds.size() > 0) {
       if (projector == 0) {
-	projector = new tsm::Projector2D;
 	const tsm::Projector2D* mh_projector = message_handler.projector();
+	projector = new tsm::Projector2D;
 
 	if (max_matching_range != 0)
 	  projector->setMaxRange(max_matching_range);
@@ -318,13 +322,22 @@ int main(int argc, char **argv) {
       }
     }
 
+    loop_rate.sleep();
     ros::spinOnce();
     if (use_gui) {
       viewer->updateGL();
       app->processEvents();
-      usleep(20000);
     }
-    //usleep(10000);
+
+    cerr << "Max freq: " << 1.0/tracker.cycleTime() \
+	 << " q_size:" << q_size
+	 << " ref_pts: ";
+    if (tracker.reference()){
+      cerr << tracker.reference()->size();
+    } else {
+      cerr << "0";
+    }
+    cerr << endl;
   }
 
   return 0;

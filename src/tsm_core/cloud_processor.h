@@ -15,7 +15,7 @@ namespace tsm {
     //! The clouds should be aligned, then
     //! points that are closer than distanceThreshold are merged based on the scaling values
     //! if the normals are compatible
-    void merge(FloatVector& dest_ranges,
+    static void merge(FloatVector& dest_ranges,
 	       IntVector& dest_indices,
 	       Cloud2D& dest,
 	       FloatVector& src_ranges,
@@ -25,5 +25,13 @@ namespace tsm {
 	       float distance_threshold = 0.2
 	       );
 
+
+
+
+    //! prunes the points in model, computing a scaled average
+    //! one point will survive for each voxel of side res. Res is in meters as it should be
+    static void voxelize(Cloud2D& model, float res);  
+
   };
+
 }
