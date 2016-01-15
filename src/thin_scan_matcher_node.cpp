@@ -210,6 +210,7 @@ int main(int argc, char **argv) {
   tracker.setClipTranslationThreshold(local_map_clipping_translation_threshold);
   std::cerr << "Tracker allocated" << std::endl;
   std::cerr << "inlier distance from tracker: "<< tracker.inlierDistance() << std::endl;
+
   // ROS topic subscriptions
   ros::Subscriber laser_sub = n.subscribe(laser_topic, 100, &MessageHandler::laser_callback, &message_handler);
 
@@ -237,10 +238,12 @@ int main(int argc, char **argv) {
 
   
   ros::Rate loop_rate(50);
+
   while (ros::ok()) {
     std::list<CloudWithTime*>& clouds = message_handler.clouds();
 
     float q_size=clouds.size();
+
     while (clouds.size() > 0) {
       if (projector == 0) {
 	const tsm::Projector2D* mh_projector = message_handler.projector();
@@ -320,24 +323,25 @@ int main(int argc, char **argv) {
 	tf::StampedTransform tf_msg(tf_content, timestamp, published_tf_destination_frame_id, published_tf_origin_frame_id);
 	tf_broadcaster.sendTransform(tf_msg);
       }
+
+      cerr << "Max freq: " << 1.0/tracker.cycleTime() \
+	   << " q_size:" << q_size
+	   << " ref_pts: ";
+      if (tracker.reference()){
+	cerr << tracker.reference()->size();
+      } else {
+	cerr << "0";
+      }
+      cerr << endl;
     }
 
     loop_rate.sleep();
     ros::spinOnce();
+
     if (use_gui) {
       viewer->updateGL();
       app->processEvents();
     }
-
-    cerr << "Max freq: " << 1.0/tracker.cycleTime() \
-	 << " q_size:" << q_size
-	 << " ref_pts: ";
-    if (tracker.reference()){
-      cerr << tracker.reference()->size();
-    } else {
-      cerr << "0";
-    }
-    cerr << endl;
   }
 
   return 0;
