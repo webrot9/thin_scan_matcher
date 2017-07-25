@@ -1,4 +1,14 @@
 #include "tracker_viewer.h"
+
+// some macro helpers for identifying the version number of QGLViewer
+// QGLViewer changed some parts of its API in version 2.6.
+// The following preprocessor hack accounts for this.
+#if (((QGLVIEWER_VERSION & 0xff0000) >> 16) >= 2 && ((QGLVIEWER_VERSION & 0x00ff00) >> 8) >= 6)
+#define qglv_real qreal
+#else
+#define qglv_real float
+#endif
+
 namespace tsm {
   using namespace std;
   using namespace Eigen;
@@ -7,12 +17,12 @@ namespace tsm {
   public:
     StandardCamera(): _standard(true) {}
   
-    float zNear() const {
+    qglv_real zNear() const {
       if(_standard) { return 0.001f; } 
       else { return Camera::zNear(); } 
     }
 
-    float zFar() const {  
+    qglv_real zFar() const {
       if(_standard) { return 10000.0f; } 
       else { return Camera::zFar(); }
     }
